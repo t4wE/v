@@ -304,6 +304,10 @@ pub:
 	is_mut           bool
 	is_global        bool
 	is_volatile      bool
+	//
+	is_deprecated    bool
+	deprecation_msg  string
+	deprecated_after string
 pub mut:
 	default_expr     Expr
 	default_expr_typ Type
@@ -1821,9 +1825,9 @@ pub fn (expr Expr) is_expr() bool {
 	return true
 }
 
-pub fn (expr Expr) is_lit() bool {
+pub fn (expr Expr) is_pure_literal() bool {
 	return match expr {
-		BoolLiteral, CharLiteral, StringLiteral, IntegerLiteral { true }
+		BoolLiteral, CharLiteral, FloatLiteral, StringLiteral, IntegerLiteral { true }
 		else { false }
 	}
 }

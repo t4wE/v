@@ -1295,6 +1295,16 @@ mm := map[string]int{}
 val := mm['bad_key'] or { panic('key not found') }
 ```
 
+You can also check, if a key is present, and get its value, if it was present, in one go:
+```v
+m := {
+	'abc': 'def'
+}
+if v := m['abc'] {
+	println('the map value for that key is: $v')
+}
+```
+
 The same optional check applies to arrays:
 
 ```v
@@ -5905,6 +5915,19 @@ fn main() {
 }
 ```
 
+Struct field deprecations:
+```v oksyntax
+module abc
+
+// Note that only *direct* accesses to Xyz.d in *other modules*, will produce deprecation notices/warnings:
+pub struct Xyz {
+pub mut:
+	a int
+	d int [deprecated: 'use Xyz.a instead'; deprecated_after: '2999-03-01'] // produce a notice, the deprecation date is in the far future
+}
+```
+
+Function/method deprecations:
 ```v
 // Calling this function will result in a deprecation warning
 [deprecated]
