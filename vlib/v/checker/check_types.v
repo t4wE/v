@@ -363,6 +363,10 @@ pub fn (mut c Checker) check_basic(got ast.Type, expected ast.Type) bool {
 }
 
 pub fn (mut c Checker) check_matching_function_symbols(got_type_sym &ast.TypeSymbol, exp_type_sym &ast.TypeSymbol) bool {
+	if c.pref.translated {
+		// TODO too open
+		return true
+	}
 	got_info := got_type_sym.info as ast.FnType
 	exp_info := exp_type_sym.info as ast.FnType
 	got_fn := got_info.func
@@ -619,7 +623,7 @@ pub fn (mut c Checker) infer_fn_generic_types(func ast.Fn, mut node ast.CallExpr
 			mut to_set := ast.void_type
 			// resolve generic struct receiver
 			if node.is_method && param.typ.has_flag(.generic) {
-				sym := c.table.sym(node.receiver_type)
+				sym := c.table.final_sym(node.receiver_type)
 				match sym.info {
 					ast.Struct, ast.Interface, ast.SumType {
 						if !isnil(c.table.cur_fn) && c.table.cur_fn.generic_names.len > 0 { // in generic fn

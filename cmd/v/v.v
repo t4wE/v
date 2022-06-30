@@ -123,8 +123,9 @@ fn main() {
 			exit(1)
 		}
 		'translate' {
-			eprintln('Translating C to V will be available in V 0.3')
-			exit(1)
+			util.launch_tool(prefs.is_verbose, 'translate', os.args[1..])
+			// exit(1)
+			// return
 		}
 		else {
 			if command.ends_with('.v') || os.exists(command) {
@@ -174,6 +175,10 @@ fn rebuild(prefs &pref.Preferences) {
 		}
 		.interpret {
 			util.launch_tool(prefs.is_verbose, 'builders/interpret_builder', os.args[1..])
+		}
+		.golang {
+			println('using Go WIP backend...')
+			util.launch_tool(prefs.is_verbose, 'builders/golang_builder', os.args[1..])
 		}
 	}
 }

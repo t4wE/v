@@ -252,7 +252,7 @@ pub fn (mut ctx Context) file(f_path string) Result {
 		return Result{}
 	}
 	content_type := vweb.mime_types[ext]
-	if content_type.len == O {
+	if content_type.len == 0 {
 		eprintln('no MIME type found for extension $ext')
 		ctx.server_error(500)
 	} else {
@@ -613,7 +613,7 @@ fn (mut ctx Context) scan_static_directory(directory_path string, mount_path str
 		for file in files {
 			full_path := os.join_path(directory_path, file)
 			if os.is_dir(full_path) {
-				ctx.scan_static_directory(full_path, mount_path + '/' + file)
+				ctx.scan_static_directory(full_path, mount_path + file)
 			} else if file.contains('.') && !file.starts_with('.') && !file.ends_with('.') {
 				ext := os.file_ext(file)
 				// Rudimentary guard against adding files not in mime_types.

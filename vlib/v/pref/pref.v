@@ -24,6 +24,7 @@ pub enum AssertFailureMode {
 }
 
 pub enum GarbageCollectionMode {
+	unknown
 	no_gc
 	boehm_full // full garbage collection mode
 	boehm_incr // incremental garbage colletion mode
@@ -50,6 +51,7 @@ pub enum Backend {
 	js_freestanding // The JavaScript freestanding backend
 	native // The Native backend
 	interpret // Interpret the ast
+	golang // Go backend
 }
 
 pub fn (b Backend) is_js() bool {
@@ -204,7 +206,7 @@ pub mut:
 	cleanup_files       []string    // list of temporary *.tmp.c and *.tmp.c.rsp files. Cleaned up on successfull builds.
 	build_options       []string    // list of options, that should be passed down to `build-module`, if needed for -usecache
 	cache_manager       vcache.CacheManager
-	gc_mode             GarbageCollectionMode = .no_gc // .no_gc, .boehm, .boehm_leak, ...
+	gc_mode             GarbageCollectionMode = .unknown // .no_gc, .boehm, .boehm_leak, ...
 	assert_failure_mode AssertFailureMode     // whether to call abort() or print_backtrace() after an assertion failure
 	message_limit       int = 100 // the maximum amount of warnings/errors/notices that will be accumulated
 	nofloat             bool // for low level code, like kernels: replaces f32 with u32 and f64 with u64
@@ -327,8 +329,14 @@ pub fn parse_args_and_show_errors(known_external_commands []string, args []strin
 			'-gc' {
 				gc_mode := cmdline.option(current_args, '-gc', '')
 				match gc_mode {
-					'', 'none' {
+					'none' {
 						res.gc_mode = .no_gc
+					}
+					'', 'boehm' {
+						res.gc_mode = .boehm_full_opt // default mode
+						res.parse_define('gcboehm')
+						res.parse_define('gcboehm_full')
+						res.parse_define('gcboehm_opt')
 					}
 					'boehm_full' {
 						res.gc_mode = .boehm_full
@@ -350,12 +358,6 @@ pub fn parse_args_and_show_errors(known_external_commands []string, args []strin
 						res.gc_mode = .boehm_incr_opt
 						res.parse_define('gcboehm')
 						res.parse_define('gcboehm_incr')
-						res.parse_define('gcboehm_opt')
-					}
-					'boehm' {
-						res.gc_mode = .boehm_full_opt // default mode
-						res.parse_define('gcboehm')
-						res.parse_define('gcboehm_full')
 						res.parse_define('gcboehm_opt')
 					}
 					'boehm_leak' {
@@ -497,6 +499,7 @@ pub fn parse_args_and_show_errors(known_external_commands []string, args []strin
 			}
 			'-translated' {
 				res.translated = true
+				res.gc_mode = .no_gc // no gc in c2v'ed code, at least for now
 			}
 			'-m32', '-m64' {
 				res.m64 = arg[2] == `6`
@@ -653,6 +656,9 @@ pub fn parse_args_and_show_errors(known_external_commands []string, args []strin
 				}
 				i++
 			}
+			'-is_o' {
+				res.is_o = true
+			}
 			'-b', '-backend' {
 				sbackend := cmdline.option(current_args, arg, 'c')
 				res.build_options << '$arg $sbackend'
@@ -731,9 +737,6 @@ pub fn parse_args_and_show_errors(known_external_commands []string, args []strin
 				exit(1)
 			}
 		}
-	}
-	if res.is_debug {
-		res.parse_define('debug')
 	}
 	if command == 'crun' {
 		res.is_crun = true
@@ -919,6 +922,7 @@ pub fn backend_from_string(s string) ?Backend {
 	match s {
 		'c' { return .c }
 		'js' { return .js_node }
+		'go' { return .golang }
 		'js_node' { return .js_node }
 		'js_browser' { return .js_browser }
 		'js_freestanding' { return .js_freestanding }
