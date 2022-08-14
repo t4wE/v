@@ -2,7 +2,6 @@ module checker
 
 import v.ast
 import v.pref
-import time
 import v.util
 import v.token
 
@@ -109,6 +108,17 @@ fn (mut c Checker) fn_decl(mut node ast.FnDecl) {
 		} else if return_sym.kind == .array_fixed {
 			c.error('fixed array cannot be returned by function', node.return_type_pos)
 		}
+		// Ensure each generic type of the parameter was declared in the function's definition
+		if node.return_type.has_flag(.generic) {
+			generic_names := c.table.generic_type_names(node.return_type)
+			for name in generic_names {
+				if name !in node.generic_names {
+					fn_generic_names := node.generic_names.join(', ')
+					c.error('generic type name `$name` is not mentioned in fn `$node.name<$fn_generic_names>`',
+						node.return_type_pos)
+				}
+			}
+		}
 	} else {
 		for mut a in node.attrs {
 			if a.kind == .comptime_define {
@@ -175,7 +185,7 @@ fn (mut c Checker) fn_decl(mut node ast.FnDecl) {
 		// Make sure all types are valid
 		for mut param in node.params {
 			c.ensure_type_exists(param.typ, param.type_pos) or { return }
-			if param.name in reserved_type_names {
+			if reserved_type_names_chk.matches(param.name) {
 				c.error('invalid use of reserved type `$param.name` as a parameter name',
 					param.pos)
 			}
@@ -208,7 +218,17 @@ fn (mut c Checker) fn_decl(mut node ast.FnDecl) {
 					}
 				}
 			}
-			//&& node.params.len == 1 && param.typ.is_ptr() {
+			// Ensure each generic type of the parameter was declared in the function's definition
+			if param.typ.has_flag(.generic) {
+				generic_names := c.table.generic_type_names(param.typ)
+				for name in generic_names {
+					if name !in node.generic_names {
+						fn_generic_names := node.generic_names.join(', ')
+						c.error('generic type name `$name` is not mentioned in fn `$node.name<$fn_generic_names>`',
+							param.type_pos)
+					}
+				}
+			}
 			if (c.pref.translated || c.file.is_translated) && node.is_variadic && param.typ.is_ptr() {
 				// TODO c2v hack to fix `(const char *s, ...)`
 				param.typ = ast.int_type.ref()
@@ -725,7 +745,7 @@ pub fn (mut c Checker) fn_call(mut node ast.CallExpr, mut continue_check &bool) 
 		c.error('function `$func.name` is private', node.pos)
 	}
 	if !isnil(c.table.cur_fn) && !c.table.cur_fn.is_deprecated && func.is_deprecated {
-		c.deprecate_fnmethod('function', func.name, func, node)
+		c.deprecate('function', func.name, func.attrs, node.pos)
 	}
 	if func.is_unsafe && !c.inside_unsafe
 		&& (func.language != .c || (func.name[2] in [`m`, `s`] && func.mod == 'builtin')) {
@@ -818,7 +838,15 @@ pub fn (mut c Checker) fn_call(mut node ast.CallExpr, mut continue_check &bool) 
 				c.error('too many arguments in call to `$func.name`', node.pos)
 			}
 		}
-		c.expected_type = param.typ
+		if func.is_variadic && i >= func.params.len - 1 {
+			param_sym := c.table.sym(param.typ)
+			if param_sym.kind == .array {
+				info := param_sym.array_info()
+				c.expected_type = info.elem_type
+			}
+		} else {
+			c.expected_type = param.typ
+		}
 
 		e_sym := c.table.sym(c.expected_type)
 		if call_arg.expr is ast.MapInit && e_sym.kind == .struct_ {
@@ -1005,7 +1033,7 @@ pub fn (mut c Checker) fn_call(mut node ast.CallExpr, mut continue_check &bool) 
 	if func.generic_names.len != node.concrete_types.len {
 		// no type arguments given in call, attempt implicit instantiation
 		c.infer_fn_generic_types(func, mut node)
-		concrete_types = node.concrete_types
+		concrete_types = node.concrete_types.map(c.unwrap_generic(it))
 	}
 	if func.generic_names.len > 0 {
 		for i, mut call_arg in node.args {
@@ -1085,6 +1113,10 @@ pub fn (mut c Checker) fn_call(mut node ast.CallExpr, mut continue_check &bool) 
 
 pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 	left_type := c.expr(node.left)
+	if left_type == ast.void_type {
+		c.error('cannot call a method using an invalid expression', node.pos)
+		return ast.void_type
+	}
 	c.expected_type = left_type
 	mut is_generic := left_type.has_flag(.generic)
 	node.left_type = left_type
@@ -1126,7 +1158,7 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 	}
 	// TODO: remove this for actual methods, use only for compiler magic
 	// FIXME: Argument count != 1 will break these
-	if left_sym.kind == .array && method_name in array_builtin_methods {
+	if left_sym.kind == .array && array_builtin_methods_chk.matches(method_name) {
 		return c.array_builtin_method_call(mut node, left_type, c.table.sym(left_type))
 	} else if (left_sym.kind == .map || final_left_sym.kind == .map)
 		&& method_name in ['clone', 'keys', 'values', 'move', 'delete'] {
@@ -1354,30 +1386,6 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 				final_arg_typ = exp_arg_sym.info.elem_type
 				final_arg_sym = c.table.sym(final_arg_typ)
 			}
-			if exp_arg_typ.has_flag(.generic) {
-				method_concrete_types := if method.generic_names.len == rec_concrete_types.len {
-					rec_concrete_types
-				} else {
-					concrete_types
-				}
-				if exp_utyp := c.table.resolve_generic_to_concrete(exp_arg_typ, method.generic_names,
-					method_concrete_types)
-				{
-					exp_arg_typ = exp_utyp
-				} else {
-					continue
-				}
-
-				if got_arg_typ.has_flag(.generic) {
-					if got_utyp := c.table.resolve_generic_to_concrete(got_arg_typ, method.generic_names,
-						method_concrete_types)
-					{
-						got_arg_typ = got_utyp
-					} else {
-						continue
-					}
-				}
-			}
 			param := if method.is_variadic && i >= method.params.len - 1 {
 				method.params.last()
 			} else {
@@ -1412,6 +1420,30 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 						arg.expr.pos())
 				} else {
 					c.fail_if_unreadable(arg.expr, got_arg_typ, 'argument')
+				}
+			}
+			if exp_arg_typ.has_flag(.generic) {
+				method_concrete_types := if method.generic_names.len == rec_concrete_types.len {
+					rec_concrete_types
+				} else {
+					concrete_types
+				}
+				if exp_utyp := c.table.resolve_generic_to_concrete(exp_arg_typ, method.generic_names,
+					method_concrete_types)
+				{
+					exp_arg_typ = exp_utyp
+				} else {
+					continue
+				}
+
+				if got_arg_typ.has_flag(.generic) {
+					if got_utyp := c.table.resolve_generic_to_concrete(got_arg_typ, method.generic_names,
+						method_concrete_types)
+					{
+						got_arg_typ = got_utyp
+					} else {
+						continue
+					}
 				}
 			}
 			if left_sym.info is ast.Array && method_name == 'sort_with_compare' {
@@ -1479,7 +1511,7 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 				node.pos)
 		}
 		if !isnil(c.table.cur_fn) && !c.table.cur_fn.is_deprecated && method.is_deprecated {
-			c.deprecate_fnmethod('method', '${left_sym.name}.$method.name', method, node)
+			c.deprecate('method', '${left_sym.name}.$method.name', method.attrs, node.pos)
 		}
 		c.set_node_expected_arg_types(mut node, method)
 		if is_method_from_embed {
@@ -1494,12 +1526,12 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 		if method.generic_names.len != node.concrete_types.len {
 			// no type arguments given in call, attempt implicit instantiation
 			c.infer_fn_generic_types(method, mut node)
-			concrete_types = node.concrete_types
-		} else {
-			if node.concrete_types.len > 0 && !node.concrete_types[0].has_flag(.generic) {
-				c.table.register_fn_concrete_types(method.fkey(), node.concrete_types)
-			}
+			concrete_types = node.concrete_types.map(c.unwrap_generic(it))
 		}
+		if concrete_types.len > 0 && !concrete_types[0].has_flag(.generic) {
+			c.table.register_fn_concrete_types(method.fkey(), concrete_types)
+		}
+
 		// resolve return generics struct to concrete type
 		if method.generic_names.len > 0 && method.return_type.has_flag(.generic)
 			&& !isnil(c.table.cur_fn) && c.table.cur_fn.generic_names.len == 0 {
@@ -1567,6 +1599,42 @@ pub fn (mut c Checker) method_call(mut node ast.CallExpr) ast.Type {
 				arg.typ = targ
 				earg_types << targ
 
+				param := if info.func.is_variadic && i >= info.func.params.len - 1 {
+					info.func.params.last()
+				} else {
+					info.func.params[i]
+				}
+				param_share := param.typ.share()
+				if param_share == .shared_t && (c.locked_names.len > 0 || c.rlocked_names.len > 0) {
+					c.error('method with `shared` arguments cannot be called inside `lock`/`rlock` block',
+						arg.pos)
+				}
+				if arg.is_mut {
+					to_lock, pos := c.fail_if_immutable(arg.expr)
+					if !param.is_mut {
+						tok := arg.share.str()
+						c.error('`$node.name` parameter ${i + 1} is not `$tok`, `$tok` is not needed`',
+							arg.expr.pos())
+					} else {
+						if param_share != arg.share {
+							c.error('wrong shared type `$arg.share.str()`, expected: `$param_share.str()`',
+								arg.expr.pos())
+						}
+						if to_lock != '' && param_share != .shared_t {
+							c.error('$to_lock is `shared` and must be `lock`ed to be passed as `mut`',
+								pos)
+						}
+					}
+				} else {
+					if param.is_mut {
+						tok := arg.share.str()
+						c.error('method `$node.name` parameter ${i + 1} is `$tok`, so use `$tok $arg.expr` instead',
+							arg.expr.pos())
+					} else {
+						c.fail_if_unreadable(arg.expr, targ, 'argument')
+					}
+				}
+
 				if i < info.func.params.len {
 					exp_arg_typ := info.func.params[i].typ
 					c.check_expected_call_arg(targ, c.unwrap_generic(exp_arg_typ), node.language,
@@ -1626,49 +1694,6 @@ fn (mut c Checker) set_node_expected_arg_types(mut node ast.CallExpr, func &ast.
 			node.expected_arg_types << func.params[i].typ
 		}
 	}
-}
-
-fn (mut c Checker) deprecate_fnmethod(kind string, name string, the_fn ast.Fn, node ast.CallExpr) {
-	mut deprecation_message := ''
-	now := time.now()
-	mut after_time := now
-	for attr in the_fn.attrs {
-		if attr.name == 'deprecated' && attr.arg != '' {
-			deprecation_message = attr.arg
-		}
-		if attr.name == 'deprecated_after' && attr.arg != '' {
-			after_time = time.parse_iso8601(attr.arg) or {
-				c.error('invalid time format', attr.pos)
-				now
-			}
-		}
-	}
-	c.deprecate(kind, name, deprecation_message, now, after_time, node.pos)
-}
-
-fn (mut c Checker) deprecate(kind string, name string, deprecation_message string, now time.Time, after_time time.Time, pos token.Pos) {
-	start_message := '$kind `$name`'
-	error_time := after_time.add_days(180)
-	if error_time < now {
-		c.error(semicolonize('$start_message has been deprecated since $after_time.ymmdd()',
-			deprecation_message), pos)
-	} else if after_time < now {
-		c.warn(semicolonize('$start_message has been deprecated since $after_time.ymmdd(), it will be an error after $error_time.ymmdd()',
-			deprecation_message), pos)
-	} else if after_time == now {
-		c.warn(semicolonize('$start_message has been deprecated', deprecation_message),
-			pos)
-	} else {
-		c.note(semicolonize('$start_message will be deprecated after $after_time.ymmdd(), and will become an error after $error_time.ymmdd()',
-			deprecation_message), pos)
-	}
-}
-
-fn semicolonize(main string, details string) string {
-	if details == '' {
-		return main
-	}
-	return '$main; $details'
 }
 
 fn (mut c Checker) post_process_generic_fns() {
@@ -1924,7 +1949,7 @@ fn (mut c Checker) array_builtin_method_call(mut node ast.CallExpr, left_type as
 					'\ne.g. `users.sort(a.id < b.id)`', node.pos)
 			}
 		} else if !(c.table.sym(elem_typ).has_method('<')
-			|| c.table.unalias_num_type(elem_typ) in [ast.int_type, ast.int_type.ref(), ast.string_type, ast.string_type.ref(), ast.i8_type, ast.i16_type, ast.i64_type, ast.byte_type, ast.rune_type, ast.u16_type, ast.u32_type, ast.u64_type, ast.f32_type, ast.f64_type, ast.char_type, ast.bool_type, ast.float_literal_type, ast.int_literal_type]) {
+			|| c.table.unalias_num_type(elem_typ) in [ast.int_type, ast.int_type.ref(), ast.string_type, ast.string_type.ref(), ast.i8_type, ast.i16_type, ast.i64_type, ast.u8_type, ast.rune_type, ast.u16_type, ast.u32_type, ast.u64_type, ast.f32_type, ast.f64_type, ast.char_type, ast.bool_type, ast.float_literal_type, ast.int_literal_type]) {
 			c.error('custom sorting condition must be supplied for type `${c.table.type_to_str(elem_typ)}`',
 				node.pos)
 		}

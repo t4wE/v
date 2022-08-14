@@ -106,8 +106,11 @@ pub fn (mut w Walker) stmt(node_ ast.Stmt) {
 		}
 		ast.AssertStmt {
 			if node.is_used {
-				w.expr(node.expr)
 				w.n_asserts++
+				w.expr(node.expr)
+				if node.extra !is ast.EmptyExpr {
+					w.expr(node.extra)
+				}
 			}
 		}
 		ast.AssignStmt {
@@ -353,6 +356,7 @@ fn (mut w Walker) expr(node_ ast.Expr) {
 			}
 		}
 		ast.None {}
+		ast.Nil {}
 		ast.ParExpr {
 			w.expr(node.expr)
 		}

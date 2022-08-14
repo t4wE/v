@@ -16,6 +16,7 @@ const (
 		'/usr/share/pkgconfig',
 		'/opt/homebrew/lib/pkgconfig', // Brew on macOS
 		'/usr/local/libdata/pkgconfig', // FreeBSD
+		'/usr/lib/i386-linux-gnu/pkgconfig', // Debian 32bit
 	]
 	version       = '0.3.2'
 )
@@ -70,7 +71,7 @@ fn (mut pc PkgConfig) parse_list(s string) []string {
 }
 
 fn (mut pc PkgConfig) parse_line(s string) string {
-	mut r := s.trim_space()
+	mut r := s.split('#')[0]
 	for r.contains('\${') {
 		tok0 := r.index('\${') or { break }
 		mut tok1 := r[tok0..].index('}') or { break }

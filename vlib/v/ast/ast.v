@@ -42,6 +42,7 @@ pub type Expr = AnonFn
 	| LockExpr
 	| MapInit
 	| MatchExpr
+	| Nil
 	| NodeError
 	| None
 	| OffsetOf
@@ -111,8 +112,9 @@ pub type Node = CallArg
 
 pub struct TypeNode {
 pub:
-	typ Type
 	pos token.Pos
+pub mut:
+	typ Type
 }
 
 pub enum ComptimeTypeKind {
@@ -145,30 +147,23 @@ pub fn (cty ComptimeType) str() string {
 	}
 }
 
-pub struct EmptyExpr {
-	x int
-}
-
-pub fn empty_expr() Expr {
-	return EmptyExpr{}
-}
+pub type EmptyExpr = u8
 
 pub struct EmptyStmt {
 pub:
 	pos token.Pos
 }
 
-pub fn empty_stmt() Stmt {
-	return EmptyStmt{}
-}
-
 pub struct EmptyNode {
-	x int
+pub:
+	pos token.Pos
 }
 
-pub fn empty_node() Node {
-	return EmptyNode{}
-}
+pub const empty_expr = Expr(EmptyExpr(0))
+
+pub const empty_stmt = Stmt(EmptyStmt{})
+
+pub const empty_node = Node(EmptyNode{})
 
 // `{stmts}` or `unsafe {stmts}`
 pub struct Block {
@@ -240,6 +235,11 @@ pub:
 	pos token.Pos
 }
 
+pub struct Nil {
+pub:
+	pos token.Pos
+}
+
 pub enum GenericKindField {
 	unknown
 	name
@@ -304,15 +304,13 @@ pub:
 	is_mut           bool
 	is_global        bool
 	is_volatile      bool
-	//
 	is_deprecated    bool
-	deprecation_msg  string
-	deprecated_after string
 pub mut:
 	default_expr     Expr
 	default_expr_typ Type
 	name             string
 	typ              Type
+	anon_struct_decl StructDecl // only if the field is an anonymous struct
 }
 
 pub fn (f &StructField) equals(o &StructField) bool {
@@ -448,8 +446,9 @@ pub struct StructInit {
 pub:
 	pos             token.Pos
 	name_pos        token.Pos
-	is_short        bool // Foo{val1, val2}
-	is_short_syntax bool // foo(field1: val1, field2: val2)
+	no_keys         bool // `Foo{val1, val2}`
+	is_short_syntax bool // `foo(field1: val1, field2: val2)`
+	is_anon         bool //  `x: struct{ foo: bar }`
 pub mut:
 	unresolved           bool
 	pre_comments         []Comment
@@ -463,6 +462,12 @@ pub mut:
 	fields               []StructInitField
 	embeds               []StructInitEmbed
 	generic_types        []Type
+}
+
+pub enum StructInitKind {
+	normal
+	short_syntax
+	anon
 }
 
 // import statement
@@ -1506,9 +1511,11 @@ pub const (
 [minify]
 pub struct AssertStmt {
 pub:
-	pos token.Pos
+	pos       token.Pos
+	extra_pos token.Pos
 pub mut:
 	expr    Expr
+	extra   Expr
 	is_used bool // asserts are used in _test.v files, as well as in non -prod builds of all files
 }
 
@@ -1774,7 +1781,7 @@ pub fn (expr Expr) pos() token.Pos {
 		EnumVal, DumpExpr, FloatLiteral, GoExpr, Ident, IfExpr, IntegerLiteral, IsRefType, Likely,
 		LockExpr, MapInit, MatchExpr, None, OffsetOf, OrExpr, ParExpr, PostfixExpr, PrefixExpr,
 		RangeExpr, SelectExpr, SelectorExpr, SizeOf, SqlExpr, StringInterLiteral, StringLiteral,
-		StructInit, TypeNode, TypeOf, UnsafeExpr, ComptimeType {
+		StructInit, TypeNode, TypeOf, UnsafeExpr, ComptimeType, Nil {
 			return expr.pos
 		}
 		IndexExpr {
@@ -2247,7 +2254,7 @@ pub fn (expr Expr) is_literal() bool {
 		CastExpr {
 			return !expr.has_arg && expr.expr.is_literal()
 				&& (expr.typ.is_ptr() || expr.typ.is_pointer()
-				|| expr.typ in [i8_type, i16_type, int_type, i64_type, byte_type, u16_type, u32_type, u64_type, f32_type, f64_type, char_type, bool_type, rune_type])
+				|| expr.typ in [i8_type, i16_type, int_type, i64_type, u8_type, u16_type, u32_type, u64_type, f32_type, f64_type, char_type, bool_type, rune_type])
 		}
 		SizeOf, IsRefType {
 			return expr.is_type || expr.expr.is_literal()
@@ -2262,7 +2269,7 @@ pub fn type_can_start_with_token(tok &token.Token) bool {
 	match tok.kind {
 		.name {
 			return (tok.lit.len > 0 && tok.lit[0].is_capital())
-				|| builtin_type_names_matcher.find(tok.lit) > 0
+				|| builtin_type_names_matcher.matches(tok.lit)
 		}
 		// Note: return type (T1, T2) should be handled elsewhere
 		.amp, .key_fn, .lsbr, .question {
@@ -2271,12 +2278,4 @@ pub fn type_can_start_with_token(tok &token.Token) bool {
 		else {}
 	}
 	return false
-}
-
-fn build_builtin_type_names_matcher() token.KeywordsMatcher {
-	mut m := map[string]int{}
-	for i, name in builtin_type_names {
-		m[name] = i
-	}
-	return token.new_keywords_matcher<int>(m)
 }

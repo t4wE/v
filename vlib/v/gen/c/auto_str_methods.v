@@ -151,7 +151,9 @@ fn (mut g Gen) final_gen_str(typ StrType) {
 			g.gen_str_for_thread(sym.info, styp, str_fn_name)
 		}
 		else {
-			verror('could not generate string method `$str_fn_name` for type `$styp`')
+			if sym.name != 'nil' {
+				verror('could not generate string method `$str_fn_name` for type `$styp`')
+			}
 		}
 	}
 }
@@ -401,7 +403,7 @@ fn (mut g Gen) gen_str_for_union_sum_type(info ast.SumType, styp string, str_fn_
 	mut clean_sum_type_v_type_name := ''
 	if info.is_anon {
 		variant_names := info.variants.map(util.strip_main_name(g.table.sym(it).name))
-		clean_sum_type_v_type_name = '(${variant_names.join(' | ')})'
+		clean_sum_type_v_type_name = '${variant_names.join('|')}'
 	} else {
 		clean_sum_type_v_type_name = styp.replace('__', '.')
 		if styp.ends_with('*') {
@@ -761,7 +763,7 @@ fn (mut g Gen) gen_str_for_map(info ast.Map, styp string, str_fn_name string) {
 }
 
 fn (g &Gen) type_to_fmt(typ ast.Type) StrIntpType {
-	if typ == ast.byte_type_idx {
+	if typ == ast.u8_type_idx {
 		return .si_u8
 	}
 	if typ == ast.char_type_idx {
@@ -841,9 +843,23 @@ fn (mut g Gen) gen_str_for_struct(info ast.Struct, styp string, str_fn_name stri
 		fn_builder.writeln('\treturn res;')
 		fn_builder.writeln('}')
 	}
-	fn_body.writeln('\tstring res = str_intp( ${info.fields.len * 4 + 3}, _MOV((StrIntpData[]){')
-	fn_body.writeln('\t\t{_SLIT("$clean_struct_v_type_name{\\n"), 0, {.d_c=0}},')
+	// find `[str: skip]` fields
+	mut field_skips := []int{}
 	for i, field in info.fields {
+		if attr := field.attrs.find_first('str') {
+			if attr.arg == 'skip' {
+				field_skips << i
+			}
+		}
+	}
+	fn_body.writeln('\tstring res = str_intp( ${(info.fields.len - field_skips.len) * 4 + 3}, _MOV((StrIntpData[]){')
+	fn_body.writeln('\t\t{_SLIT("$clean_struct_v_type_name{\\n"), 0, {.d_c=0}},')
+	mut is_first := true
+	for i, field in info.fields {
+		// Skip `str:skip` fields
+		if i in field_skips {
+			continue
+		}
 		ftyp_noshared := if field.typ.has_flag(.shared_f) {
 			field.typ.deref().clear_flag(.shared_f)
 		} else {
@@ -867,9 +883,10 @@ fn (mut g Gen) gen_str_for_struct(info ast.Struct, styp string, str_fn_name stri
 			prefix = 'C'
 		}
 
-		// first fields doesn't need \n
-		if i == 0 {
+		if is_first {
+			// first field doesn't need \n
 			fn_body.write_string('\t\t{_SLIT0, $c.si_s_code, {.d_s=indents}}, {_SLIT("    $field.name: $ptr_amp$prefix"), 0, {.d_c=0}}, ')
+			is_first = false
 		} else {
 			fn_body.write_string('\t\t{_SLIT("\\n"), $c.si_s_code, {.d_s=indents}}, {_SLIT("    $field.name: $ptr_amp$prefix"), 0, {.d_c=0}}, ')
 		}

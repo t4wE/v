@@ -73,6 +73,7 @@ cachegrind.out.*
 .gdb_history
 *.dSYM
 *.def
+vgcore.*
 
 # ignore system files
 .DS_Store
@@ -105,3 +106,6 @@ thirdparty/stdatomic/nix/cpp/*.h
 
 # ignore VLS log
 vls.log
+
+# ignore v2go tmperror files
+*.tmperr

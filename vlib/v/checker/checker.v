@@ -24,8 +24,8 @@ const (
 
 pub const (
 	valid_comptime_if_os             = ['windows', 'ios', 'macos', 'mach', 'darwin', 'hpux', 'gnu',
-		'qnx', 'linux', 'freebsd', 'openbsd', 'netbsd', 'bsd', 'dragonfly', 'android', 'solaris',
-		'haiku', 'serenity', 'vinix']
+		'qnx', 'linux', 'freebsd', 'openbsd', 'netbsd', 'bsd', 'dragonfly', 'android', 'termux',
+		'solaris', 'haiku', 'serenity', 'vinix']
 	valid_comptime_compression_types = ['none', 'zlib']
 	valid_comptime_if_compilers      = ['gcc', 'tinyc', 'clang', 'mingw', 'msvc', 'cplusplus']
 	valid_comptime_if_platforms      = ['amd64', 'i386', 'aarch64', 'arm64', 'arm32', 'rv64', 'rv32']
@@ -36,9 +36,11 @@ pub const (
 	valid_comptime_not_user_defined  = all_valid_comptime_idents()
 	array_builtin_methods            = ['filter', 'clone', 'repeat', 'reverse', 'map', 'slice',
 		'sort', 'contains', 'index', 'wait', 'any', 'all', 'first', 'last', 'pop']
+	array_builtin_methods_chk        = token.new_keywords_matcher_from_array_trie(array_builtin_methods)
 	// TODO: remove `byte` from this list when it is no longer supported
 	reserved_type_names              = ['byte', 'bool', 'char', 'i8', 'i16', 'int', 'i64', 'u8',
 		'u16', 'u32', 'u64', 'f32', 'f64', 'map', 'string', 'rune']
+	reserved_type_names_chk          = token.new_keywords_matcher_from_array_trie(reserved_type_names)
 	vroot_is_deprecated_message      = '@VROOT is deprecated, use @VMODROOT or @VEXEROOT instead'
 )
 
@@ -69,7 +71,7 @@ pub mut:
 	expected_or_type          ast.Type        // fn() or { 'this type' } eg. string. expected or block type
 	expected_expr_type        ast.Type        // if/match is_expr: expected_type
 	mod                       string          // current module name
-	const_var                 &ast.ConstField = voidptr(0) // the current constant, when checking const declarations
+	const_var                 &ast.ConstField = unsafe { nil } // the current constant, when checking const declarations
 	const_deps                []string
 	const_names               []string
 	global_names              []string
@@ -112,7 +114,7 @@ mut:
 	timers                           &util.Timers = util.get_timers()
 	comptime_fields_default_type     ast.Type
 	comptime_fields_type             map[string]ast.Type
-	fn_scope                         &ast.Scope = voidptr(0)
+	fn_scope                         &ast.Scope = unsafe { nil }
 	main_fn_decl_node                ast.FnDecl
 	match_exhaustive_cutoff_limit    int = 10
 	is_last_stmt                     bool
@@ -125,6 +127,7 @@ mut:
 	inside_decl_rhs                  bool
 	inside_if_guard                  bool // true inside the guard condition of `if x := opt() {}`
 	comptime_call_pos                int  // needed for correctly checking use before decl for templates
+	goto_labels                      map[string]int // to check for unused goto labels
 }
 
 pub fn new_checker(table &ast.Table, pref &pref.Preferences) &Checker {
@@ -143,7 +146,7 @@ pub fn new_checker(table &ast.Table, pref &pref.Preferences) &Checker {
 fn (mut c Checker) reset_checker_state_at_start_of_new_file() {
 	c.expected_type = ast.void_type
 	c.expected_or_type = ast.void_type
-	c.const_var = voidptr(0)
+	c.const_var = unsafe { nil }
 	c.in_for_count = 0
 	c.returns = false
 	c.scope_returns = false
@@ -226,6 +229,7 @@ pub fn (mut c Checker) check(ast_file_ &ast.File) {
 	}
 
 	c.check_scope_vars(c.file.scope)
+	c.check_unused_labels()
 }
 
 pub fn (mut c Checker) check_scope_vars(sc &ast.Scope) {
@@ -271,35 +275,37 @@ pub fn (mut c Checker) check_files(ast_files []&ast.File) {
 	// c.files = ast_files
 	mut has_main_mod_file := false
 	mut has_main_fn := false
-	mut files_from_main_module := []&ast.File{}
-	for i in 0 .. ast_files.len {
-		mut file := unsafe { ast_files[i] }
-		c.timers.start('checker_check $file.path')
-		c.check(file)
-		if file.mod.name == 'main' {
-			files_from_main_module << file
-			has_main_mod_file = true
-			if c.file_has_main_fn(file) {
-				has_main_fn = true
-			}
-		}
-		c.timers.show('checker_check $file.path')
-	}
-	if has_main_mod_file && !has_main_fn && files_from_main_module.len > 0 {
-		if c.pref.is_script && !c.pref.is_test {
-			// files_from_main_module contain preludes at the start
-			mut the_main_file := files_from_main_module.last()
-			the_main_file.stmts << ast.FnDecl{
-				name: 'main.main'
-				mod: 'main'
-				is_main: true
-				file: the_main_file.path
-				return_type: ast.void_type
-				scope: &ast.Scope{
-					parent: 0
+	unsafe {
+		mut files_from_main_module := []&ast.File{}
+		for i in 0 .. ast_files.len {
+			mut file := ast_files[i]
+			c.timers.start('checker_check $file.path')
+			c.check(file)
+			if file.mod.name == 'main' {
+				files_from_main_module << file
+				has_main_mod_file = true
+				if c.file_has_main_fn(file) {
+					has_main_fn = true
 				}
 			}
-			has_main_fn = true
+			c.timers.show('checker_check $file.path')
+		}
+		if has_main_mod_file && !has_main_fn && files_from_main_module.len > 0 {
+			if c.pref.is_script && !c.pref.is_test {
+				// files_from_main_module contain preludes at the start
+				mut the_main_file := files_from_main_module.last()
+				the_main_file.stmts << ast.FnDecl{
+					name: 'main.main'
+					mod: 'main'
+					is_main: true
+					file: the_main_file.path
+					return_type: ast.void_type
+					scope: &ast.Scope{
+						parent: 0
+					}
+				}
+				has_main_fn = true
+			}
 		}
 	}
 	c.timers.start('checker_post_process_generic_fns')
@@ -1123,7 +1129,8 @@ pub fn (mut c Checker) selector_expr(mut node ast.SelectorExpr) ast.Type {
 	if typ == ast.void_type_idx {
 		// This means that the field has an undefined type.
 		// This error was handled before.
-		// c.error('`void` type has no fields', node.pos)
+		c.error('`$node.expr` does not return a value', node.pos)
+		node.expr_type = ast.void_type
 		return ast.void_type
 	}
 	node.expr_type = typ
@@ -1231,15 +1238,7 @@ pub fn (mut c Checker) selector_expr(mut node ast.SelectorExpr) ast.Type {
 		}
 		field_sym := c.table.sym(field.typ)
 		if field.is_deprecated && is_used_outside {
-			now := time.now()
-			mut after_time := now
-			if field.deprecated_after != '' {
-				after_time = time.parse_iso8601(field.deprecated_after) or {
-					c.error('invalid time format', field.pos)
-					now
-				}
-			}
-			c.deprecate('field', field_name, field.deprecation_msg, now, after_time, node.pos)
+			c.deprecate('field', field_name, field.attrs, node.pos)
 		}
 		if field_sym.kind in [.sum_type, .interface_] {
 			if !prevent_sum_type_unwrapping_once {
@@ -1343,6 +1342,23 @@ pub fn (mut c Checker) const_decl(mut node ast.ConstDecl) {
 			}
 		}
 		node.fields[i].typ = ast.mktyp(typ)
+		if mut field.expr is ast.IfExpr {
+			if field.expr.branches.len == 2 {
+				first_stmts := field.expr.branches[0].stmts
+				second_stmts := field.expr.branches[1].stmts
+				if first_stmts.len > 0 && first_stmts.last() is ast.ExprStmt
+					&& (first_stmts.last() as ast.ExprStmt).typ != ast.void_type {
+					field.expr.is_expr = true
+					field.expr.typ = (first_stmts.last() as ast.ExprStmt).typ
+					field.typ = field.expr.typ
+				} else if second_stmts.len > 0 && second_stmts.last() is ast.ExprStmt
+					&& (second_stmts.last() as ast.ExprStmt).typ != ast.void_type {
+					field.expr.is_expr = true
+					field.expr.typ = (second_stmts.last() as ast.ExprStmt).typ
+					field.typ = field.expr.typ
+				}
+			}
+		}
 		c.const_deps = []
 		c.const_var = prev_const_var
 	}
@@ -1550,19 +1566,11 @@ fn (mut c Checker) stmt(node_ ast.Stmt) {
 		ast.GlobalDecl {
 			c.global_decl(mut node)
 		}
-		ast.GotoLabel {}
+		ast.GotoLabel {
+			c.goto_label(node)
+		}
 		ast.GotoStmt {
-			if c.inside_defer {
-				c.error('goto is not allowed in defer statements', node.pos)
-			}
-			if !c.inside_unsafe {
-				c.warn('`goto` requires `unsafe` (consider using labelled break/continue)',
-					node.pos)
-			}
-			if !isnil(c.table.cur_fn) && node.name !in c.table.cur_fn.label_names {
-				c.error('unknown label `$node.name`', node.pos)
-			}
-			// TODO: check label doesn't bypass variable declarations
+			c.goto_stmt(node)
 		}
 		ast.HashStmt {
 			c.hash_stmt(mut node)
@@ -1603,6 +1611,14 @@ fn (mut c Checker) assert_stmt(node ast.AssertStmt) {
 		atype_name := c.table.sym(assert_type).name
 		c.error('assert can be used only with `bool` expressions, but found `$atype_name` instead',
 			node.pos)
+	}
+	if node.extra !is ast.EmptyExpr {
+		extra_type := c.expr(node.extra)
+		if extra_type != ast.string_type {
+			extra_type_name := c.table.sym(extra_type).name
+			c.error('assert allows only a single string as its second argument, but found `$extra_type_name` instead',
+				node.extra_pos)
+		}
 	}
 	c.fail_if_unreadable(node.expr, ast.bool_type_idx, 'assertion')
 	c.expected_type = cur_exp_typ
@@ -1905,7 +1921,13 @@ fn (mut c Checker) hash_stmt(mut node ast.HashStmt) {
 			}
 		}
 		else {
-			if node.kind != 'define' {
+			if node.kind == 'define' {
+				if !c.is_builtin_mod && !c.file.path.ends_with('.c.v')
+					&& !c.file.path.contains('vlib' + os.path_separator) {
+					c.error("#define can only be used in vlib (V's standard library) and *.c.v files",
+						node.pos)
+				}
+			} else {
 				c.error('expected `#define`, `#flag`, `#include`, `#insert` or `#pkgconfig` not $node.val',
 					node.pos)
 			}
@@ -1940,10 +1962,8 @@ fn (mut c Checker) import_stmt(node ast.Import) {
 		}
 		c.error('module `$node.mod` has no constant or function `$sym.name`', sym.pos)
 	}
-	if after_time := c.table.mdeprecated_after[node.mod] {
-		now := time.now()
-		deprecation_message := c.table.mdeprecated_msg[node.mod]
-		c.deprecate('module', node.mod, deprecation_message, now, after_time, node.pos)
+	if c.table.module_deprecated[node.mod] {
+		c.deprecate('module', node.mod, c.table.module_attrs[node.mod], node.pos)
 	}
 }
 
@@ -2029,7 +2049,9 @@ pub fn (mut c Checker) expr(node_ ast.Expr) ast.Type {
 			c.error('incorrect use of compile-time type', node.pos)
 		}
 		ast.EmptyExpr {
-			print_backtrace()
+			if c.pref.is_verbose {
+				print_backtrace()
+			}
 			c.error('checker.expr(): unhandled EmptyExpr', token.Pos{})
 			return ast.void_type
 		}
@@ -2146,8 +2168,9 @@ pub fn (mut c Checker) expr(node_ ast.Expr) ast.Type {
 				return ast.void_type
 			}
 
-			tsym := c.table.sym(node.expr_type)
-			c.table.dumps[int(node.expr_type)] = tsym.cname
+			unwrapped_expr_type := c.unwrap_generic(node.expr_type)
+			tsym := c.table.sym(unwrapped_expr_type)
+			c.table.dumps[int(unwrapped_expr_type)] = tsym.cname
 			node.cname = tsym.cname
 			return node.expr_type
 		}
@@ -2212,6 +2235,12 @@ pub fn (mut c Checker) expr(node_ ast.Expr) ast.Type {
 		ast.MatchExpr {
 			return c.match_expr(mut node)
 		}
+		ast.Nil {
+			if !c.inside_unsafe {
+				c.error('`nil` is only allowed in `unsafe` code', node.pos)
+			}
+			return ast.nil_type
+		}
 		ast.PostfixExpr {
 			return c.postfix_expr(mut node)
 		}
@@ -2265,7 +2294,7 @@ pub fn (mut c Checker) expr(node_ ast.Expr) ast.Type {
 		ast.StringLiteral {
 			if node.language == .c {
 				// string literal starts with "c": `C.printf(c'hello')`
-				return ast.byte_type.set_nr_muls(1)
+				return ast.u8_type.set_nr_muls(1)
 			}
 			return c.string_lit(mut node)
 		}
@@ -2455,7 +2484,7 @@ pub fn (mut c Checker) cast_expr(mut node ast.CastExpr) ast.Type {
 	}
 
 	if to_type == ast.string_type {
-		if from_type in [ast.byte_type, ast.bool_type] {
+		if from_type in [ast.u8_type, ast.bool_type] {
 			snexpr := node.expr.str()
 			ft := c.table.type_to_str(from_type)
 			c.error('cannot cast type `$ft` to string, use `${snexpr}.str()` instead.',
@@ -2738,6 +2767,9 @@ pub fn (mut c Checker) ident(mut node ast.Ident) ast.Type {
 							} else {
 								typ = obj.expr.expr_type.clear_flag(.optional).clear_flag(.result)
 							}
+						} else if obj.expr is ast.EmptyExpr {
+							c.error('invalid variable `$node.name`', node.pos)
+							typ = ast.void_type
 						} else {
 							typ = c.expr(obj.expr)
 						}
@@ -2772,6 +2804,14 @@ pub fn (mut c Checker) ident(mut node ast.Ident) ast.Type {
 		}
 		if mut obj := c.file.global_scope.find(name) {
 			match mut obj {
+				ast.GlobalField {
+					node.kind = .global
+					node.info = ast.IdentVar{
+						typ: obj.typ
+					}
+					node.obj = obj
+					return obj.typ
+				}
 				ast.ConstField {
 					if !(obj.is_pub || obj.mod == c.mod || c.pref.is_test) {
 						c.error('constant `$obj.name` is private', node.pos)
@@ -2890,7 +2930,11 @@ pub fn (mut c Checker) concat_expr(mut node ast.ConcatExpr) ast.Type {
 // smartcast takes the expression with the current type which should be smartcasted to the target type in the given scope
 fn (mut c Checker) smartcast(expr_ ast.Expr, cur_type ast.Type, to_type_ ast.Type, mut scope ast.Scope) {
 	sym := c.table.sym(cur_type)
-	to_type := if sym.kind == .interface_ { to_type_.ref() } else { to_type_ }
+	to_type := if sym.kind == .interface_ && c.table.sym(to_type_).kind != .interface_ {
+		to_type_.ref()
+	} else {
+		to_type_
+	}
 	mut expr := unsafe { expr_ }
 	match mut expr {
 		ast.SelectorExpr {
@@ -3086,7 +3130,7 @@ fn (mut c Checker) find_obj_definition(obj ast.ScopeObject) ?ast.Expr {
 	match obj {
 		ast.Var, ast.ConstField, ast.GlobalField, ast.AsmRegister { name = obj.name }
 	}
-	mut expr := ast.empty_expr()
+	mut expr := ast.empty_expr
 	if obj is ast.Var {
 		if obj.is_mut {
 			return error('`$name` is mut and may have changed since its definition')
@@ -3145,7 +3189,7 @@ pub fn (mut c Checker) mark_as_referenced(mut node ast.Expr, as_interface bool) 
 		ast.Ident {
 			if mut node.obj is ast.Var {
 				mut obj := unsafe { &node.obj }
-				if c.fn_scope != voidptr(0) {
+				if c.fn_scope != unsafe { nil } {
 					obj = c.fn_scope.find_var(node.obj.name) or { obj }
 				}
 				if obj.typ == 0 {
@@ -3244,6 +3288,11 @@ pub fn (mut c Checker) prefix_expr(mut node ast.PrefixExpr) ast.Type {
 			ast.InfixExpr, ast.StringLiteral, ast.StringInterLiteral] {
 			c.error('cannot take the address of $expr', node.pos)
 		}
+		if mut node.right is ast.Ident {
+			if node.right.kind == .constant && !c.inside_unsafe && c.pref.experimental {
+				c.warn('cannot take an address of const outside `unsafe`', node.right.pos)
+			}
+		}
 		if mut node.right is ast.IndexExpr {
 			typ_sym := c.table.sym(node.right.left_type)
 			mut is_mut := false
@@ -3286,6 +3335,9 @@ pub fn (mut c Checker) prefix_expr(mut node ast.PrefixExpr) ast.Type {
 		if !right_type.is_pointer() && !c.pref.translated && !c.file.is_translated {
 			s := c.table.type_to_str(right_type)
 			c.error('invalid indirect of `$s`', node.pos)
+		}
+		if right_type.is_voidptr() {
+			c.error('cannot dereference to void', node.pos)
 		}
 	}
 	if node.op == .bit_not && !right_type.is_int() && !c.pref.translated && !c.file.is_translated {
@@ -3851,4 +3903,74 @@ pub fn (mut c Checker) fail_if_unreadable(expr ast.Expr, typ ast.Type, what stri
 		c.error('you have to create a handle and `rlock` it to use a `shared` element as non-mut $what',
 			pos)
 	}
+}
+
+fn (mut c Checker) goto_label(node ast.GotoLabel) {
+	// Register a goto label
+	if c.goto_labels[node.name] == 0 {
+		c.goto_labels[node.name] = 0
+	}
+}
+
+pub fn (mut c Checker) goto_stmt(node ast.GotoStmt) {
+	if c.inside_defer {
+		c.error('goto is not allowed in defer statements', node.pos)
+	}
+	if !c.inside_unsafe {
+		c.warn('`goto` requires `unsafe` (consider using labelled break/continue)', node.pos)
+	}
+	if !isnil(c.table.cur_fn) && node.name !in c.table.cur_fn.label_names {
+		c.error('unknown label `$node.name`', node.pos)
+	}
+	c.goto_labels[node.name]++ // Register a label use
+	// TODO: check label doesn't bypass variable declarations
+}
+
+fn (mut c Checker) check_unused_labels() {
+	for label, nr_uses in c.goto_labels {
+		if nr_uses == 0 {
+			// TODO show label's location
+			c.warn('label `$label` defined and not used', token.Pos{})
+			c.goto_labels[label]++ // so that this warning is not shown again
+		}
+	}
+}
+
+fn (mut c Checker) deprecate(kind string, name string, attrs []ast.Attr, pos token.Pos) {
+	mut deprecation_message := ''
+	now := time.now()
+	mut after_time := now
+	for attr in attrs {
+		if attr.name == 'deprecated' && attr.arg != '' {
+			deprecation_message = attr.arg
+		}
+		if attr.name == 'deprecated_after' && attr.arg != '' {
+			after_time = time.parse_iso8601(attr.arg) or {
+				c.error('invalid time format', attr.pos)
+				now
+			}
+		}
+	}
+	start_message := '$kind `$name`'
+	error_time := after_time.add_days(180)
+	if error_time < now {
+		c.error(semicolonize('$start_message has been deprecated since $after_time.ymmdd()',
+			deprecation_message), pos)
+	} else if after_time < now {
+		c.warn(semicolonize('$start_message has been deprecated since $after_time.ymmdd(), it will be an error after $error_time.ymmdd()',
+			deprecation_message), pos)
+	} else if after_time == now {
+		c.warn(semicolonize('$start_message has been deprecated', deprecation_message),
+			pos)
+	} else {
+		c.note(semicolonize('$start_message will be deprecated after $after_time.ymmdd(), and will become an error after $error_time.ymmdd()',
+			deprecation_message), pos)
+	}
+}
+
+fn semicolonize(main string, details string) string {
+	if details == '' {
+		return main
+	}
+	return '$main; $details'
 }
