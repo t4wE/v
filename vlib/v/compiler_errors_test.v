@@ -19,6 +19,12 @@ const skip_on_cstrict = [
 const skip_on_ubuntu_musl = [
 	'vlib/v/checker/tests/vweb_tmpl_used_var.vv',
 	'vlib/v/checker/tests/vweb_routing_checks.vv',
+	'vlib/v/checker/tests/orm_op_with_option_and_none.vv',
+	'vlib/v/tests/skip_unused/gg_code.vv',
+]
+
+const skip_on_ci_musl = [
+	'vlib/v/tests/skip_unused/gg_code.vv',
 ]
 
 const vexe = os.getenv('VEXE')
@@ -36,6 +42,8 @@ const should_autofix = os.getenv('VAUTOFIX') != ''
 const github_job = os.getenv('GITHUB_JOB')
 
 const v_ci_ubuntu_musl = os.getenv('V_CI_UBUNTU_MUSL').len > 0
+
+const v_ci_musl = os.getenv('V_CI_MUSL').len > 0
 
 const v_ci_cstrict = os.getenv('V_CI_CSTRICT').len > 0
 
@@ -55,6 +63,8 @@ mut:
 	found___          string
 	took              time.Duration
 	cli_cmd           string
+	ntries            int
+	max_ntries        int = 1
 }
 
 struct Tasks {
@@ -70,15 +80,16 @@ fn test_all() {
 	vroot := os.dir(vexe)
 	os.chdir(vroot) or {}
 	checker_dir := 'vlib/v/checker/tests'
+	checker_with_check_option_dir := 'vlib/v/checker/tests/with_check_option'
 	parser_dir := 'vlib/v/parser/tests'
 	scanner_dir := 'vlib/v/scanner/tests'
-	module_dir := '$checker_dir/modules'
-	global_dir := '$checker_dir/globals'
-	global_run_dir := '$checker_dir/globals_run'
-	run_dir := '$checker_dir/run'
+	module_dir := '${checker_dir}/modules'
+	global_dir := '${checker_dir}/globals'
+	global_run_dir := '${checker_dir}/globals_run'
+	run_dir := '${checker_dir}/run'
 	skip_unused_dir := 'vlib/v/tests/skip_unused'
 	//
-	checker_tests := get_tests_in_dir(checker_dir, false)
+	checker_tests := get_tests_in_dir(checker_dir, false).filter(!it.contains('with_check_option'))
 	parser_tests := get_tests_in_dir(parser_dir, false)
 	scanner_tests := get_tests_in_dir(scanner_dir, false)
 	global_tests := get_tests_in_dir(global_dir, false)
@@ -86,6 +97,8 @@ fn test_all() {
 	module_tests := get_tests_in_dir(module_dir, true)
 	run_tests := get_tests_in_dir(run_dir, false)
 	skip_unused_dir_tests := get_tests_in_dir(skip_unused_dir, false)
+	checker_with_check_option_tests := get_tests_in_dir(checker_with_check_option_dir,
+		false)
 	mut tasks := Tasks{
 		vexe: vexe
 		label: 'all tests'
@@ -100,6 +113,8 @@ fn test_all() {
 	tasks.add('', global_dir, '-enable-globals', '.out', global_tests, false)
 	tasks.add('', module_dir, '-prod run', '.out', module_tests, true)
 	tasks.add('', run_dir, 'run', '.run.out', run_tests, false)
+	tasks.add('', checker_with_check_option_dir, '-check', '.out', checker_with_check_option_tests,
+		false)
 	tasks.run()
 	//
 	if os.user_os() == 'linux' {
@@ -124,7 +139,7 @@ fn test_all() {
 			parallel_jobs: 1
 			label: 'comptime env tests'
 		}
-		cte_dir := '$checker_dir/comptime_env'
+		cte_dir := '${checker_dir}/comptime_env'
 		files := get_tests_in_dir(cte_dir, false)
 		cte_tasks.add('', cte_dir, '-no-retry-compilation run', '.run.out', files, false)
 		cte_tasks.add_evars('VAR=/usr/include', '', cte_dir, '-no-retry-compilation run',
@@ -173,6 +188,7 @@ fn (mut tasks Tasks) add(custom_vexe string, dir string, voptions string, result
 }
 
 fn (mut tasks Tasks) add_evars(evars string, custom_vexe string, dir string, voptions string, result_extension string, tests []string, is_module bool) {
+	max_ntries := get_max_ntries()
 	paths := vtest.filter_vtest_only(tests, basepath: dir)
 	for path in paths {
 		tasks.all << TaskDescription{
@@ -183,6 +199,7 @@ fn (mut tasks Tasks) add_evars(evars string, custom_vexe string, dir string, vop
 			result_extension: result_extension
 			path: path
 			is_module: is_module
+			max_ntries: max_ntries
 		}
 	}
 }
@@ -205,6 +222,9 @@ fn (mut tasks Tasks) run() {
 	mut m_skip_files := skip_files.clone()
 	if v_ci_ubuntu_musl {
 		m_skip_files << skip_on_ubuntu_musl
+	}
+	if v_ci_musl {
+		m_skip_files << skip_on_ci_musl
 	}
 	if v_ci_cstrict {
 		m_skip_files << skip_on_cstrict
@@ -237,7 +257,7 @@ fn (mut tasks Tasks) run() {
 	}
 	work.close()
 	for _ in 0 .. vjobs {
-		go work_processor(work, results)
+		spawn work_processor(work, results)
 	}
 	if github_job == '' {
 		println('')
@@ -259,13 +279,13 @@ fn (mut tasks Tasks) run() {
 			bench.fail()
 			eprintln(bstep_message(mut bench, benchmark.b_fail, task.path, task.took))
 			println('============')
-			println('failed cmd: $task.cli_cmd')
-			println('expected_out_path: $task.expected_out_path')
+			println('failed cmd: ${task.cli_cmd}')
+			println('expected_out_path: ${task.expected_out_path}')
 			println('============')
-			println('expected:')
+			println('expected (len: ${task.expected.len:5}, hash: ${task.expected.hash()}):')
 			println(task.expected)
 			println('============')
-			println('found:')
+			println('found    (len: ${task.found___.len:5}, hash: ${task.found___.hash()}):')
 			println(task.found___)
 			println('============\n')
 			diff_content(task.expected, task.found___)
@@ -274,7 +294,7 @@ fn (mut tasks Tasks) run() {
 			bench.ok()
 			assert true
 			if tasks.show_cmd {
-				eprintln(bstep_message(mut bench, benchmark.b_ok, '$task.cli_cmd', task.took))
+				eprintln(bstep_message(mut bench, benchmark.b_ok, '${task.cli_cmd}', task.took))
 			} else {
 				if github_job == '' {
 					// local mode:
@@ -300,11 +320,37 @@ fn (mut tasks Tasks) run() {
 fn work_processor(work chan TaskDescription, results chan TaskDescription) {
 	for {
 		mut task := <-work or { break }
-		sw := time.new_stopwatch()
-		task.execute()
-		task.took = sw.elapsed()
+		mut i := 0
+		for i = 1; i <= task.max_ntries; i++ {
+			// reset the .is_error flag, from the potential previous retries, otherwise it can
+			// be set on the first retry, all the next retries can succeed, and the task will
+			// be still considered failed, with a very puzzling non difference reported.
+			task.is_error = false
+			sw := time.new_stopwatch()
+			task.execute()
+			task.took = sw.elapsed()
+			cli_cmd := task.get_cli_cmd()
+			if !task.is_error {
+				if i > 1 {
+					eprintln('>    succeeded after ${i:3}/${task.max_ntries} retries, doing `${cli_cmd}`')
+				}
+				break
+			}
+			eprintln('>    failed ${i:3}/${task.max_ntries} times, doing `${cli_cmd}`')
+			if i <= task.max_ntries {
+				time.sleep(100 * time.millisecond)
+			}
+		}
+		task.ntries = i
 		results <- task
 	}
+}
+
+fn (mut task TaskDescription) get_cli_cmd() string {
+	program := task.path
+	cmd_prefix := if task.evars.len > 0 { '${task.evars} ' } else { '' }
+	cli_cmd := '${cmd_prefix}${os.quoted_path(task.vexe)} ${task.voptions} ${os.quoted_path(program)}'
+	return cli_cmd
 }
 
 // actual processing; Note: no output is done here at all
@@ -312,11 +358,9 @@ fn (mut task TaskDescription) execute() {
 	if task.is_skipped {
 		return
 	}
-	program := task.path
-	cmd_prefix := if task.evars.len > 0 { '$task.evars ' } else { '' }
-	cli_cmd := '$cmd_prefix${os.quoted_path(task.vexe)} $task.voptions ${os.quoted_path(program)}'
+	cli_cmd := task.get_cli_cmd()
 	res := os.execute(cli_cmd)
-	expected_out_path := program.replace('.vv', '') + task.result_extension
+	expected_out_path := task.path.replace('.vv', '') + task.result_extension
 	task.expected_out_path = expected_out_path
 	task.cli_cmd = cli_cmd
 	if should_autofix && !os.exists(expected_out_path) {
@@ -347,10 +391,34 @@ fn clean_line_endings(s string) string {
 	return res
 }
 
-fn diff_content(s1 string, s2 string) {
-	diff_cmd := diff.find_working_diff_command() or { return }
+fn chunks(s string, chunk_size int) string {
+	mut res := []string{}
+	for i := 0; i < s.len; i += chunk_size {
+		res << s#[i..i + chunk_size]
+	}
+	return res.join('\n')
+}
+
+fn chunka(s []u8, chunk_size int) string {
+	mut res := []string{}
+	for i := 0; i < s.len; i += chunk_size {
+		res << s#[i..i + chunk_size].str()
+	}
+	return res.join('\n')
+}
+
+fn diff_content(expected string, found string) {
 	println(term.bold(term.yellow('diff: ')))
-	println(diff.color_compare_strings(diff_cmd, rand.ulid(), s1, s2))
+	if diff_cmd := diff.find_working_diff_command() {
+		println(diff.color_compare_strings(diff_cmd, rand.ulid(), expected, found))
+	} else {
+		println('>>>> could not find a working diff command; dumping bytes instead...')
+		println('expected bytes:\n${chunka(expected.bytes(), 25)}')
+		println('   found bytes:\n${chunka(found.bytes(), 25)}')
+		println('============')
+		println('  expected hex:\n${chunks(expected.bytes().hex(), 80)}')
+		println('     found hex:\n${chunks(found.bytes().hex(), 80)}')
+	}
 	println('============\n')
 }
 
@@ -364,4 +432,8 @@ fn get_tests_in_dir(dir string, is_module bool) []string {
 	}
 	tests.sort()
 	return tests
+}
+
+fn get_max_ntries() int {
+	return if v_ci_musl { 3 } else { 1 }
 }

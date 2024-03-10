@@ -32,9 +32,10 @@ fn main() {
 		exit(1)
 	}
 	backend_pos := args_before.index('-b')
-	backend := if backend_pos == -1 { '.c' } else { args_before[backend_pos + 1] } // this giant mess because closures are not implemented
+	backend := if backend_pos == -1 { '.c' } else { args_before[backend_pos + 1] }
 
 	mut ts := testing.new_test_session(args_before.join(' '), true)
+	ts.exec_mode = .compile_and_run
 	ts.fail_fast = ctx.fail_fast
 	for targ in args_after {
 		if os.is_dir(targ) {
@@ -55,20 +56,20 @@ fn main() {
 						continue
 					}
 					ts.files << targ
-					ts.skip_files << targ
+					ts.skip_files << os.abs_path(targ)
 					continue
 				}
 				.ignore {}
 			}
 		} else {
-			eprintln('\nUnrecognized test file `$targ`.\n `v test` can only be used with folders and/or _test.v files.\n')
+			eprintln('\nUnrecognized test file `${targ}`.\n `v test` can only be used with folders and/or _test.v files.\n')
 			show_usage()
 			exit(1)
 		}
 	}
-	testing.header('Testing...')
+	ts.session_start('Testing...')
 	ts.test()
-	println(ts.benchmark.total_message('all V _test.v files'))
+	ts.session_stop('all V _test.v files')
 	if ts.failed_cmds.len > 0 {
 		exit(1)
 	}
@@ -113,7 +114,7 @@ pub fn (mut ctx Context) should_test_dir(path string, backend string) ([]string,
 						continue
 					}
 					res_files << p
-					skip_files << p
+					skip_files << os.abs_path(p)
 				}
 				.ignore {}
 			}
@@ -132,7 +133,13 @@ fn (mut ctx Context) should_test(path string, backend string) ShouldTestStatus {
 	if path.ends_with('mysql_orm_test.v') {
 		testing.find_started_process('mysqld') or { return .skip }
 	}
+	if path.ends_with('mysql_test.v') {
+		testing.find_started_process('mysqld') or { return .skip }
+	}
 	if path.ends_with('pg_orm_test.v') {
+		testing.find_started_process('postgres') or { return .skip }
+	}
+	if path.ends_with('pg_double_test.v') {
 		testing.find_started_process('postgres') or { return .skip }
 	}
 	if path.ends_with('onecontext_test.v') {
@@ -144,6 +151,9 @@ fn (mut ctx Context) should_test(path string, backend string) ShouldTestStatus {
 		}
 	}
 	if path.ends_with('_test.v') {
+		return ctx.should_test_when_it_contains_matching_fns(path, backend)
+	}
+	if path.ends_with('_test.c.v') {
 		return ctx.should_test_when_it_contains_matching_fns(path, backend)
 	}
 	if path.ends_with('_test.js.v') {
@@ -198,7 +208,7 @@ fn (mut ctx Context) should_test_when_it_contains_matching_fns(path string, back
 				}
 				if tname.match_glob(pat) {
 					if ctx.verbose {
-						println('> compiling path: $path, since test fn `$tname` matches glob pattern `$pat`')
+						println('> compiling path: ${path}, since test fn `${tname}` matches glob pattern `${pat}`')
 					}
 					return .test
 				}

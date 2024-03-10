@@ -1,4 +1,4 @@
-## Description:
+## Description
 
 `crypto` is a module that exposes cryptographic algorithms to V programs.
 
@@ -13,17 +13,18 @@ to create a destination buffer of the correct size to receive the decrypted data
 
 The implementations here are loosely based on [Go's crypto package](https://pkg.go.dev/crypto).
 
-## Examples:
+## Examples
 
-### AES:
+### AES
+
 ```v
 import crypto.aes
 import crypto.rand
 
 fn main() {
 	// remember to save this key somewhere if you ever want to decrypt your data
-	key := rand.bytes(32)?
-	println('KEY: $key')
+	key := rand.bytes(32)!
+	println('KEY: ${key}')
 
 	// this data is one block (16 bytes) big
 	mut data := 'THIS IS THE DATA'.bytes()
@@ -45,7 +46,8 @@ fn main() {
 }
 ```
 
-### JWT:
+### JWT
+
 ```v
 import crypto.hmac
 import crypto.sha256
@@ -70,17 +72,17 @@ fn main() {
 	token := make_token(secret)
 	ok := auth_verify(secret, token)
 	dt := sw.elapsed().microseconds()
-	println('token: $token')
-	println('auth_verify(secret, token): $ok')
-	println('Elapsed time: $dt uS')
+	println('token: ${token}')
+	println('auth_verify(secret, token): ${ok}')
+	println('Elapsed time: ${dt} uS')
 }
 
 fn make_token(secret string) string {
 	header := base64.url_encode(json.encode(JwtHeader{'HS256', 'JWT'}).bytes())
 	payload := base64.url_encode(json.encode(JwtPayload{'1234567890', 'John Doe', 1516239022}).bytes())
-	signature := base64.url_encode(hmac.new(secret.bytes(), '${header}.$payload'.bytes(),
+	signature := base64.url_encode(hmac.new(secret.bytes(), '${header}.${payload}'.bytes(),
 		sha256.sum, sha256.block_size))
-	jwt := '${header}.${payload}.$signature'
+	jwt := '${header}.${payload}.${signature}'
 	return jwt
 }
 

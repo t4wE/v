@@ -5,9 +5,7 @@ import vweb
 // import vweb.assets
 import time
 
-const (
-	port = 8081
-)
+const port = 8081
 
 struct App {
 	vweb.Context
@@ -17,7 +15,7 @@ fn main() {
 	mut app := &App{}
 	app.serve_static('/favicon.ico', 'favicon.ico')
 	// Automatically make available known static mime types found in given directory.
-	os.chdir(os.dir(os.executable()))?
+	os.chdir(os.dir(os.executable()))!
 	app.handle_static('assets', true)
 	vweb.run(app, port)
 }

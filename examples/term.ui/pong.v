@@ -9,21 +9,21 @@ enum Mode {
 	game
 }
 
-const (
-	player_one = 1 // Human control this racket
-	player_two = 0 // Take over this AI controller
-	white      = ui.Color{255, 255, 255}
-	orange     = ui.Color{255, 140, 0}
-)
+const player_one = 1 // Human control this racket
 
-[heap]
+const player_two = 0 // Take over this AI controller
+
+const white = ui.Color{255, 255, 255}
+const orange = ui.Color{255, 140, 0}
+
+@[heap]
 struct App {
 mut:
-	tui    &ui.Context = unsafe { 0 }
+	tui    &ui.Context = unsafe { nil }
 	mode   Mode        = Mode.menu
 	width  int
 	height int
-	game   &Game = unsafe { 0 }
+	game   &Game = unsafe { nil }
 	dt     f32
 	ticks  i64
 }
@@ -191,7 +191,7 @@ fn (mut a App) draw_game() {
 
 struct Player {
 mut:
-	game        &Game
+	game        &Game = unsafe { nil }
 	pos         Vec
 	racket_size int = 4
 	score       int
@@ -239,10 +239,10 @@ fn (mut b Ball) update(dt f32) {
 	b.pos.y += b.vel.y * b.acc.y * dt
 }
 
-[heap]
+@[heap]
 struct Game {
 mut:
-	app     &App = unsafe { 0 }
+	app     &App = unsafe { nil }
 	players []Player
 	ball    Ball
 }
@@ -458,42 +458,48 @@ fn (mut g Game) free() {
 }
 
 // TODO Remove these wrapper functions when we can assign methods as callbacks
-fn init(x voidptr) {
-	mut app := &App(x)
+fn init(mut app App) {
 	app.init()
 }
 
-fn frame(x voidptr) {
-	mut app := &App(x)
+fn frame(mut app App) {
 	app.frame()
 }
 
-fn cleanup(x voidptr) {
-	mut app := &App(x)
-	app.free()
+fn cleanup(mut app App) {
+	unsafe {
+		app.free()
+	}
 }
 
 fn fail(error string) {
 	eprintln(error)
 }
 
-fn event(e &ui.Event, x voidptr) {
-	mut app := &App(x)
+fn event(e &ui.Event, mut app App) {
 	app.event(e)
 }
+
+type InitFn = fn (voidptr)
+
+type EventFn = fn (&ui.Event, voidptr)
+
+type FrameFn = fn (voidptr)
+
+type CleanupFn = fn (voidptr)
 
 fn main() {
 	mut app := &App{}
 	app.tui = ui.init(
 		user_data: app
-		init_fn: init
-		frame_fn: frame
-		cleanup_fn: cleanup
-		event_fn: event
+		init_fn: InitFn(init)
+		frame_fn: FrameFn(frame)
+		cleanup_fn: CleanupFn(cleanup)
+		event_fn: EventFn(event)
 		fail_fn: fail
 		capture_events: true
 		hide_cursor: true
 		frame_rate: 60
 	)
-	app.tui.run()?
+	app.tui.run()!
 }

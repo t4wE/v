@@ -1,8 +1,6 @@
 module html
 
-const (
-	null_element = int(0x80000000)
-)
+const null_element = int(0x80000000)
 
 struct Stack {
 mut:
@@ -10,12 +8,12 @@ mut:
 	size     int
 }
 
-[inline]
+@[inline]
 fn is_null(data int) bool {
 	return data == html.null_element
 }
 
-[inline]
+@[inline]
 fn (stack Stack) is_empty() bool {
 	return stack.size <= 0
 }
@@ -54,13 +52,13 @@ fn (mut btree BTree) add_children(tag Tag) int {
 	btree.all_tags << tag
 	if btree.all_tags.len > 1 {
 		for btree.childrens.len <= btree.node_pointer {
-			mut temp_array := btree.childrens
+			mut temp_array := btree.childrens.clone()
 			temp_array << []int{}
 			btree.childrens = temp_array
 		}
 		btree.childrens[btree.node_pointer] << btree.all_tags.len - 1
 		for btree.parents.len < btree.all_tags.len {
-			mut temp_array := btree.parents
+			mut temp_array := btree.parents.clone()
 			temp_array << 0
 			btree.parents = temp_array
 		}
@@ -69,17 +67,17 @@ fn (mut btree BTree) add_children(tag Tag) int {
 	return btree.all_tags.len - 1
 }
 
-[inline]
+@[inline]
 fn (btree BTree) get_children() []int {
 	return btree.childrens[btree.node_pointer]
 }
 
-[inline]
+@[inline]
 fn (btree BTree) get_parent() int {
 	return btree.parents[btree.node_pointer]
 }
 
-[inline]
+@[inline]
 fn (btree BTree) get_stored() Tag {
 	return btree.all_tags[btree.node_pointer]
 }

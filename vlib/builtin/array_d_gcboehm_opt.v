@@ -24,9 +24,35 @@ fn __new_array_with_default_noscan(mylen int, cap int, elm_size int, val voidptr
 		len: mylen
 		cap: cap_
 	}
-	if val != 0 {
+	if val != 0 && arr.data != unsafe { nil } {
+		if elm_size == 1 {
+			byte_value := *(&u8(val))
+			dptr := &u8(arr.data)
+			for i in 0 .. arr.len {
+				unsafe {
+					dptr[i] = byte_value
+				}
+			}
+		} else {
+			for i in 0 .. arr.len {
+				unsafe { arr.set_unsafe(i, val) }
+			}
+		}
+	}
+	return arr
+}
+
+fn __new_array_with_multi_default_noscan(mylen int, cap int, elm_size int, val voidptr) array {
+	cap_ := if cap < mylen { mylen } else { cap }
+	mut arr := array{
+		element_size: elm_size
+		data: vcalloc_noscan(u64(cap_) * u64(elm_size))
+		len: mylen
+		cap: cap_
+	}
+	if val != 0 && arr.data != unsafe { nil } {
 		for i in 0 .. arr.len {
-			unsafe { arr.set_unsafe(i, val) }
+			unsafe { arr.set_unsafe(i, charptr(val) + i * elm_size) }
 		}
 	}
 	return arr
@@ -66,6 +92,9 @@ fn (mut a array) ensure_cap_noscan(required int) {
 	if required <= a.cap {
 		return
 	}
+	if a.flags.has(.nogrow) {
+		panic('array.ensure_cap_noscan: array with the flag `.nogrow` cannot grow in size, array required new size: ${required}')
+	}
 	mut cap := if a.cap > 0 { a.cap } else { 2 }
 	for required > cap {
 		cap *= 2
@@ -82,14 +111,14 @@ fn (mut a array) ensure_cap_noscan(required int) {
 }
 
 // repeat returns a new array with the given array elements repeated given times.
-// `cgen` will replace this with an apropriate call to `repeat_to_depth()`
+// `cgen` will replace this with an appropriate call to `repeat_to_depth()`
 
 // version of `repeat()` that handles multi dimensional arrays
 // `unsafe` to call directly because `depth` is not checked
-[unsafe]
+@[unsafe]
 fn (a array) repeat_to_depth_noscan(count int, depth int) array {
 	if count < 0 {
-		panic('array.repeat: count is negative: $count')
+		panic('array.repeat: count is negative: ${count}')
 	}
 	mut size := u64(count) * u64(a.len) * u64(a.element_size)
 	if size == 0 {
@@ -122,9 +151,9 @@ fn (a array) repeat_to_depth_noscan(count int, depth int) array {
 
 // insert inserts a value in the array at index `i`
 fn (mut a array) insert_noscan(i int, val voidptr) {
-	$if !no_bounds_checking ? {
+	$if !no_bounds_checking {
 		if i < 0 || i > a.len {
-			panic('array.insert: index out of range (i == $i, a.len == $a.len)')
+			panic('array.insert: index out of range (i == ${i}, a.len == ${a.len})')
 		}
 	}
 	a.ensure_cap_noscan(a.len + 1)
@@ -136,11 +165,11 @@ fn (mut a array) insert_noscan(i int, val voidptr) {
 }
 
 // insert_many inserts many values into the array from index `i`.
-[unsafe]
+@[unsafe]
 fn (mut a array) insert_many_noscan(i int, val voidptr, size int) {
-	$if !no_bounds_checking ? {
+	$if !no_bounds_checking {
 		if i < 0 || i > a.len {
-			panic('array.insert_many: index out of range (i == $i, a.len == $a.len)')
+			panic('array.insert_many: index out of range (i == ${i}, a.len == ${a.len})')
 		}
 	}
 	a.ensure_cap_noscan(a.len + size)
@@ -159,7 +188,7 @@ fn (mut a array) prepend_noscan(val voidptr) {
 }
 
 // prepend_many prepends another array to this array.
-[unsafe]
+@[unsafe]
 fn (mut a array) prepend_many_noscan(val voidptr, size int) {
 	unsafe { a.insert_many_noscan(0, val, size) }
 }
@@ -167,7 +196,7 @@ fn (mut a array) prepend_many_noscan(val voidptr, size int) {
 // pop returns the last element of the array, and removes it.
 fn (mut a array) pop_noscan() voidptr {
 	// in a sense, this is the opposite of `a << x`
-	$if !no_bounds_checking ? {
+	$if !no_bounds_checking {
 		if a.len == 0 {
 			panic('array.pop: array is empty')
 		}
@@ -188,7 +217,7 @@ fn (a array) clone_static_to_depth_noscan(depth int) array {
 }
 
 // recursively clone given array - `unsafe` when called directly because depth is not checked
-[unsafe]
+@[unsafe]
 fn (a &array) clone_to_depth_noscan(depth int) array {
 	mut size := u64(a.cap) * u64(a.element_size)
 	if size == 0 {
@@ -225,9 +254,9 @@ fn (mut a array) push_noscan(val voidptr) {
 
 // push_many implements the functionality for pushing another array.
 // `val` is array.data and user facing usage is `a << [1,2,3]`
-[unsafe]
+@[unsafe]
 fn (mut a3 array) push_many_noscan(val voidptr, size int) {
-	if size <= 0 || isnil(val) {
+	if size <= 0 || val == unsafe { nil } {
 		return
 	}
 	if a3.data == val && a3.data != 0 {
@@ -269,7 +298,7 @@ fn (mut a array) grow_cap_noscan(amount int) {
 }
 
 // grow_len ensures that an array has a.len + amount of length
-[unsafe]
+@[unsafe]
 fn (mut a array) grow_len_noscan(amount int) {
 	a.ensure_cap_noscan(a.len + amount)
 	a.len += amount

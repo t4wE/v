@@ -319,3 +319,26 @@ fn test_in_array_literal_of_sumtype() {
 	val2 := `+`
 	assert val2 in [TokenValue(`+`), TokenValue(`-`)]
 }
+
+type StringOrNumber = int | string
+
+fn test_in_array_of_sumtype() {
+	arr := [StringOrNumber(1), 2, 'test']
+	println(1 in arr)
+	assert 1 in arr
+}
+
+// for issue 20268
+struct Bar {}
+
+// vfmt off
+fn in_both_mut_ref(mut arr []&Bar, mut bar &Bar) {
+	assert bar !in arr
+}
+
+fn test_in_both_mut_and_ref() {
+	mut arr := []&Bar{}
+	mut bar := Bar{}
+	in_both_mut_ref(mut &arr, mut &bar)
+}
+// vfmt on

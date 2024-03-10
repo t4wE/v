@@ -7,8 +7,8 @@ const rate = f32(1) / 60 * 10
 
 struct App {
 mut:
-	gg   &gg.Context
-	anim &Anim
+	gg   &gg.Context = unsafe { nil }
+	anim &Anim       = unsafe { nil }
 }
 
 struct Anim {
@@ -31,7 +31,6 @@ fn (mut anim Anim) advance() {
 
 fn main() {
 	mut app := &App{
-		gg: 0
 		anim: &Anim{}
 	}
 	app.gg = gg.new_context(

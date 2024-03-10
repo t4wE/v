@@ -1,6 +1,4 @@
-module main
-
-[heap]
+@[heap]
 pub struct Grid {
 pub mut:
 	header []string

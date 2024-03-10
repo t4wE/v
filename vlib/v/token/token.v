@@ -1,15 +1,17 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module token
 
-[minify]
+const orm_custom_operators = ['like']
+
+@[minify]
 pub struct Token {
 pub:
 	kind    Kind   // the token number/enum; for quick comparisons
 	lit     string // literal representation of the token
-	line_nr int    // the line number in the source where the token occured
-	col     int    // the column in the source where the token occured
+	line_nr int    // the line number in the source where the token occurred
+	col     int    // the column in the source where the token occurred
 	// name_idx int // name table index for O(1) lookup
 	pos  int // the position of the token in scanner text
 	len  int // length of the literal
@@ -115,6 +117,7 @@ pub enum Kind {
 	key_none
 	key_return
 	key_select
+	key_like
 	key_sizeof
 	key_isreftype
 	key_likely
@@ -131,6 +134,7 @@ pub enum Kind {
 	key_static
 	key_volatile
 	key_unsafe
+	key_spawn
 	keyword_end
 	_end_
 }
@@ -169,34 +173,42 @@ pub enum AtKind {
 	line_nr
 	column_nr
 	vhash
+	v_current_hash
 	vmod_file
 	vmodroot_path
 	vroot_path // obsolete
 	vexeroot_path
+	file_path_line_nr
+	location
 }
 
-pub const (
-	assign_tokens   = [Kind.assign, .plus_assign, .minus_assign, .mult_assign, .div_assign,
-		.xor_assign, .mod_assign, .or_assign, .and_assign, .right_shift_assign, .left_shift_assign,
-		.unsigned_right_shift_assign]
+pub const assign_tokens = [Kind.assign, .plus_assign, .minus_assign, .mult_assign, .div_assign,
+	.xor_assign, .mod_assign, .or_assign, .and_assign, .right_shift_assign, .left_shift_assign,
+	.unsigned_right_shift_assign]
 
-	valid_at_tokens = ['@VROOT', '@VMODROOT', '@VEXEROOT', '@FN', '@METHOD', '@MOD', '@STRUCT',
-		'@VEXE', '@FILE', '@LINE', '@COLUMN', '@VHASH', '@VMOD_FILE']
+pub const valid_at_tokens = ['@VROOT', '@VMODROOT', '@VEXEROOT', '@FN', '@METHOD', '@MOD', '@STRUCT',
+	'@VEXE', '@FILE', '@LINE', '@COLUMN', '@VHASH', '@VCURRENTHASH', '@VMOD_FILE', '@FILE_LINE',
+	'@LOCATION']
 
-	token_str       = build_token_str()
+pub const token_str = build_token_str()
 
-	keywords        = build_keys()
-)
+pub const keywords = build_keys()
 
-pub const scanner_matcher = new_keywords_matcher_trie<Kind>(keywords)
+pub const scanner_matcher = new_keywords_matcher_trie[Kind](keywords)
 
-// build_keys genereates a map with keywords' string values:
+// build_keys generates a map with keywords' string values:
 // Keywords['return'] == .key_return
 fn build_keys() map[string]Kind {
 	mut res := map[string]Kind{}
 	for t in int(Kind.keyword_beg) + 1 .. int(Kind.keyword_end) {
 		key := token.token_str[t]
-		res[key] = Kind(t)
+
+		// Exclude custom ORM operators from V keyword list
+		if key in token.orm_custom_operators {
+			continue
+		}
+
+		res[key] = unsafe { Kind(t) }
 	}
 	return res
 }
@@ -313,10 +325,12 @@ fn build_token_str() []string {
 	s[Kind.key_defer] = 'defer'
 	s[Kind.key_match] = 'match'
 	s[Kind.key_select] = 'select'
+	s[Kind.key_like] = 'like'
 	s[Kind.key_none] = 'none'
 	s[Kind.key_nil] = 'nil'
 	s[Kind.key_offsetof] = '__offsetof'
 	s[Kind.key_is] = 'is'
+	s[Kind.key_spawn] = 'spawn'
 	// The following kinds are not for tokens returned by the V scanner.
 	// They are used just for organisation/ease of checking:
 	s[Kind.keyword_beg] = 'keyword_beg'
@@ -325,31 +339,31 @@ fn build_token_str() []string {
 	$if debug_build_token_str ? {
 		for k, v in s {
 			if v == '' {
-				eprintln('>>> ${@MOD}.${@METHOD} missing k: $k | .${kind_to_string(Kind(k))}')
+				eprintln('>>> ${@MOD}.${@METHOD} missing k: ${k} | .${kind_to_string(unsafe { Kind(k) })}')
 			}
 		}
 	}
 	return s
 }
 
-[inline]
+@[inline]
 pub fn is_key(key string) bool {
 	return int(token.keywords[key]) > 0
 }
 
-[inline]
+@[inline]
 pub fn is_decl(t Kind) bool {
 	return t in [.key_enum, .key_interface, .key_fn, .key_struct, .key_type, .key_const, .key_pub,
 		.eof]
 }
 
-[inline]
+@[inline]
 pub fn (t Kind) is_assign() bool {
 	return t in token.assign_tokens
 }
 
 // note: used for some code generation, so no quoting
-[inline]
+@[inline]
 pub fn (t Kind) str() string {
 	idx := int(t)
 	if idx < 0 || token.token_str.len <= idx {
@@ -358,20 +372,25 @@ pub fn (t Kind) str() string {
 	return token.token_str[idx]
 }
 
+@[inline]
+pub fn (t Token) is_next_to(pre_token Token) bool {
+	return t.pos - pre_token.pos == pre_token.len
+}
+
 pub fn (t Token) str() string {
 	mut s := t.kind.str()
 	if s.len == 0 {
 		eprintln('missing token kind string')
 	} else if !s[0].is_letter() {
 		// punctuation, operators
-		return 'token `$s`'
+		return 'token `${s}`'
 	}
 	if is_key(t.lit) {
 		s = 'keyword'
 	}
 	if t.lit != '' {
 		// string contents etc
-		s += ' `$t.lit`'
+		s += ' `${t.lit}`'
 	}
 	return s
 }
@@ -379,14 +398,10 @@ pub fn (t Token) str() string {
 pub fn (t Token) debug() string {
 	ks := kind_to_string(t.kind)
 	s := if t.lit == '' { t.kind.str() } else { t.lit }
-	return 'tok: .${ks:-12} | lit: `$s`'
+	return 'tok: .${ks:-12} | lit: `${s}`'
 }
 
 // Representation of highest and lowest precedence
-/*
-pub const lowest_prec = 0
-pub const highest_prec = 8
-*/
 pub enum Precedence {
 	lowest
 	cond // OR or AND
@@ -397,14 +412,15 @@ pub enum Precedence {
 	sum // + - | ^
 	product // * / << >> >>> &
 	// mod // %
-	prefix // -X or !X
+	prefix // -X or !X; TODO: seems unused
 	postfix // ++ or --
 	call // func(X) or foo.method(X)
 	index // array[index], map[key]
+	highest
 }
 
 pub fn build_precedences() []Precedence {
-	mut p := []Precedence{len: int(Kind._end_)}
+	mut p := []Precedence{len: int(Kind._end_), init: Precedence.lowest}
 	p[Kind.lsbr] = .index
 	p[Kind.nilsbr] = .index
 	p[Kind.dot] = .call
@@ -426,13 +442,14 @@ pub fn build_precedences() []Precedence {
 	p[Kind.minus] = .sum
 	p[Kind.pipe] = .sum
 	p[Kind.xor] = .sum
-	// `==` | `!=` | `<` | `<=` | `>` | `>=`
+	// `==` | `!=` | `<` | `<=` | `>` | `>=` | `like`
 	p[Kind.eq] = .eq
 	p[Kind.ne] = .eq
 	p[Kind.lt] = .eq
 	p[Kind.le] = .eq
 	p[Kind.gt] = .eq
 	p[Kind.ge] = .eq
+	p[Kind.key_like] = .eq
 	// `=` | `+=` | ...
 	p[Kind.assign] = .assign
 	p[Kind.plus_assign] = .assign
@@ -459,49 +476,55 @@ pub fn build_precedences() []Precedence {
 
 const precedences = build_precedences()
 
-// precedence returns a tokens precedence if defined, otherwise lowest_prec
-[inline]
+// precedence returns a tokens precedence if defined, otherwise 0
+@[direct_array_access; inline]
 pub fn (tok Token) precedence() int {
 	return int(token.precedences[tok.kind])
 }
 
+// precedence returns the precedence of the given token `kind` if defined, otherwise 0
+@[direct_array_access; inline]
+pub fn (kind Kind) precedence() int {
+	return int(token.precedences[kind])
+}
+
 // is_scalar returns true if the token is a scalar
-[inline]
+@[inline]
 pub fn (tok Token) is_scalar() bool {
 	return tok.kind in [.number, .string]
 }
 
 // is_unary returns true if the token can be in a unary expression
-[inline]
+@[inline]
 pub fn (tok Token) is_unary() bool {
 	// `+` | `-` | `!` | `~` | `*` | `&` | `<-`
 	return tok.kind in [.plus, .minus, .not, .bit_not, .mul, .amp, .arrow]
 }
 
-[inline]
+@[inline]
 pub fn (tok Kind) is_relational() bool {
 	// `<` | `<=` | `>` | `>=` | `==` | `!=`
 	return tok in [.lt, .le, .gt, .ge, .eq, .ne]
 }
 
-[inline]
+@[inline]
 pub fn (k Kind) is_start_of_type() bool {
 	return k in [.name, .lpar, .amp, .lsbr, .question, .key_shared, .not]
 }
 
-[inline]
+@[inline]
 pub fn (kind Kind) is_prefix() bool {
 	return kind in [.minus, .amp, .mul, .not, .bit_not]
 }
 
-[inline]
+@[inline]
 pub fn (kind Kind) is_infix() bool {
 	return kind in [.plus, .minus, .mod, .mul, .div, .eq, .ne, .gt, .lt, .key_in, .key_as, .ge,
 		.le, .logical_or, .xor, .not_in, .key_is, .not_is, .and, .dot, .pipe, .amp, .left_shift,
-		.right_shift, .unsigned_right_shift, .arrow]
+		.right_shift, .unsigned_right_shift, .arrow, .key_like]
 }
 
-[inline]
+@[inline]
 pub fn (kind Kind) is_postfix() bool {
 	return kind in [.inc, .dec, .question]
 }
@@ -605,6 +628,7 @@ pub fn kind_to_string(k Kind) string {
 		.key_none { 'key_none' }
 		.key_return { 'key_return' }
 		.key_select { 'key_select' }
+		.key_like { 'key_like' }
 		.key_sizeof { 'key_sizeof' }
 		.key_isreftype { 'key_isreftype' }
 		.key_likely { 'key_likely' }
@@ -621,13 +645,14 @@ pub fn kind_to_string(k Kind) string {
 		.key_static { 'key_static' }
 		.key_volatile { 'key_volatile' }
 		.key_unsafe { 'key_unsafe' }
+		.key_spawn { 'key_spawn' }
 		.keyword_end { 'keyword_end' }
 		._end_ { '_end_' }
 		.key_nil { 'key_nil' }
 	}
 }
 
-pub fn kind_from_string(s string) ?Kind {
+pub fn kind_from_string(s string) !Kind {
 	return match s {
 		'unknown' { .unknown }
 		'eof' { .eof }
@@ -726,6 +751,7 @@ pub fn kind_from_string(s string) ?Kind {
 		'key_none' { .key_none }
 		'key_return' { .key_return }
 		'key_select' { .key_select }
+		'key_like' { .key_like }
 		'key_sizeof' { .key_sizeof }
 		'key_isreftype' { .key_isreftype }
 		'key_likely' { .key_likely }
@@ -742,6 +768,7 @@ pub fn kind_from_string(s string) ?Kind {
 		'key_static' { .key_static }
 		'key_volatile' { .key_volatile }
 		'key_unsafe' { .key_unsafe }
+		'key_spawn' { .key_spawn }
 		'keyword_end' { .keyword_end }
 		'_end_' { ._end_ }
 		else { error('unknown') }

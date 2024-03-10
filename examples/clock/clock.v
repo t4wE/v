@@ -8,27 +8,25 @@ import gx
 import math
 import time
 
-const (
-	// All coordinates are designed for a clock size of this many pixel.
-	// You cannot change the size of the clock by adjusting this value.
-	design_size = 700
-	center      = 350
+// All coordinates are designed for a clock size of this many pixel.
+// You cannot change the size of the clock by adjusting this value.
+const design_size = 700
+const center = 350
 
-	// Half the width of a tic-mark.
-	tw          = 9
-	// Height of a minute tic-mark. (hour is twice, 3-hour is thrice)
-	th          = 25
-	// Padding of tic-mark to window border
-	tp          = 10
+// Half the width of a tic-mark.
+const tw = 9
+// Height of a minute tic-mark. (hour is twice, 3-hour is thrice)
+const th = 25
+// Padding of tic-mark to window border
+const tp = 10
 
-	tic_color   = gx.Color{
-		r: 50
-		g: 50
-		b: 50
-	}
-	hand_color        = gx.black
-	second_hand_color = gx.red
-)
+const tic_color = gx.Color{
+	r: 50
+	g: 50
+	b: 50
+}
+const hand_color = gx.black
+const second_hand_color = gx.red
 
 struct App {
 	minutes_tic []f32 = [f32(center - tw), tp, center + tw, tp, center + tw, tp, center + tw,
@@ -42,7 +40,7 @@ struct App {
 	minute_hand []f32 = [f32(334.25), 40.25, 350, 24.5, 365.75, 40.25, 365.75, 427, 334.25, 427]
 	second_hand []f32 = [f32(345.8), 38.5, 350, 34.3, 354.2000, 38.5, 358.75, 427, 341.25, 427]
 mut:
-	gg        &gg.Context = unsafe { 0 }
+	gg        &gg.Context = unsafe { nil }
 	draw_flag bool        = true
 	dpi_scale f32 = 1.0
 }
@@ -74,12 +72,12 @@ fn on_frame(mut app App) {
 	// draw minute hand
 	mut j := f32(n.minute)
 	if n.second == 59 { // make minute hand move smoothly
-		j += f32(math.sin(f32(n.microsecond) / 1e6 * math.pi / 2.0))
+		j += f32(math.sin(f32(n.nanosecond) / 1e9 * math.pi / 2.0))
 	}
 	draw_convex_poly_rotate(mut app.gg, app.dpi_scale, app.minute_hand, hand_color, j * 6)
 
 	// draw second hand with smooth transition
-	k := f32(n.second) + f32(math.sin(f32(n.microsecond) / 1e6 * math.pi / 2.0))
+	k := f32(n.second) + f32(math.sin(f32(n.nanosecond) / 1e9 * math.pi / 2.0))
 	draw_convex_poly_rotate(mut app.gg, app.dpi_scale, app.second_hand, second_hand_color,
 		0 + k * 6)
 
@@ -87,7 +85,7 @@ fn on_frame(mut app App) {
 }
 
 // Rotate a polygon round the centerpoint
-[manualfree]
+@[manualfree]
 fn draw_convex_poly_rotate(mut ctx gg.Context, dpi_scale f32, points []f32, c gx.Color, angle f32) {
 	sa := math.sin(math.pi * angle / 180.0)
 	ca := math.cos(math.pi * angle / 180.0)
@@ -147,8 +145,6 @@ fn on_init(mut app App) {
 	app.resize()
 }
 
-// is needed for easier diagnostics on windows
-[console]
 fn main() {
 	println("Press 'q' to quit.")
 	mut font_path := os.resource_abs_path(os.join_path('..', 'assets', 'fonts', 'RobotoMono-Regular.ttf'))

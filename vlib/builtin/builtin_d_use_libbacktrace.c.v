@@ -1,4 +1,4 @@
-[has_globals]
+@[has_globals]
 module builtin
 
 #flag -I@VEXEROOT/thirdparty/libbacktrace
@@ -6,7 +6,7 @@ module builtin
 #include <backtrace.h>
 
 // NOTE: Don't mark this as a [typedef] or it may cause compiler errors!
-struct C.backtrace_state {
+pub struct C.backtrace_state {
 	// filename &char
 }
 
@@ -21,7 +21,7 @@ __global bt_state = init_bt_state()
 
 fn init_bt_state() &C.backtrace_state {
 	$if !tinyc {
-		mut filename := &char(0)
+		mut filename := &char(unsafe { nil })
 		$if windows {
 			filename = unsafe { string_from_wide(&&u16(g_main_argv)[0]).str }
 		} $else {
@@ -29,7 +29,7 @@ fn init_bt_state() &C.backtrace_state {
 		}
 		return C.backtrace_create_state(filename, 1, bt_error_handler, 0)
 	}
-	return &C.backtrace_state(0)
+	return &C.backtrace_state(unsafe { nil })
 }
 
 // for bt_error_callback
@@ -38,15 +38,19 @@ struct BacktraceOptions {
 }
 
 fn bt_print_callback(data &BacktraceOptions, pc voidptr, filename_ptr &char, line int, fn_name_ptr &char) int {
-	filename := if isnil(filename_ptr) { '???' } else { unsafe { filename_ptr.vstring() } }
-	fn_name := if isnil(fn_name_ptr) {
+	filename := if filename_ptr == unsafe { nil } {
+		'???'
+	} else {
+		unsafe { filename_ptr.vstring() }
+	}
+	fn_name := if fn_name_ptr == unsafe { nil } {
 		'???'
 	} else {
 		(unsafe { fn_name_ptr.vstring() }).replace('__', '.')
 	}
 	// keep it for later
 	// pc_64 := u64(pc)
-	bt_str := '$filename:$line: by $fn_name'
+	bt_str := '${filename}:${line}: by ${fn_name}'
 	if data.stdin {
 		println(bt_str)
 	} else {
@@ -56,13 +60,13 @@ fn bt_print_callback(data &BacktraceOptions, pc voidptr, filename_ptr &char, lin
 }
 
 fn bt_error_callback(data voidptr, msg_ptr &char, errnum int) {
-	// if !isnil(data) && !isnil(data.state) && !isnil(data.state.filename) {
+	// if data != unsafe { nil } && data.state != unsafe { nil } && data.state.filename != unsafe { nil } {
 	// 	filename := unsafe{ data.state.filename.vstring() }
 	// 	eprint('$filename: ')
 	// }
 
 	msg := unsafe { msg_ptr.vstring() }
-	eprint('libbacktrace: $msg')
+	eprint('libbacktrace: ${msg}')
 	if errnum > 0 {
 		eprint(': ${C.strerror(errnum)}')
 	}
@@ -81,7 +85,7 @@ fn bt_error_handler(data voidptr, msg &char, errnum int) {
 	exit(1)
 }
 
-[noinline]
+@[noinline]
 fn print_libbacktrace(frames_to_skip int) {
 	$if no_backtrace ? {
 		return
@@ -90,7 +94,7 @@ fn print_libbacktrace(frames_to_skip int) {
 	C.backtrace_full(bt_state, frames_to_skip, bt_print_callback, bt_error_callback, data)
 }
 
-[noinline]
+@[noinline]
 fn eprint_libbacktrace(frames_to_skip int) {
 	$if no_backtrace ? {
 		return

@@ -3,18 +3,16 @@ module sim
 import benchmark
 import term
 
-pub type SimRequestHandler = fn (request &SimRequest) ?
+pub type SimRequestHandler = fn (request &SimRequest) !
 
-pub type SimStartHandler = fn () ?
+pub type SimStartHandler = fn () !
 
-pub type SimFinishHandler = fn () ?
+pub type SimFinishHandler = fn () !
 
-pub const (
-	default_width  = 600
-	default_height = 600
-)
+pub const default_width = 600
+pub const default_height = 600
 
-[params]
+@[params]
 pub struct GridSettings {
 pub:
 	width  int = sim.default_width
@@ -27,13 +25,13 @@ pub fn new_grid_settings(settings GridSettings) GridSettings {
 	}
 }
 
-[params]
+@[params]
 pub struct RunnerSettings {
 pub:
 	grid       GridSettings
-	on_request SimRequestHandler
-	on_start   SimStartHandler
-	on_finish  SimFinishHandler
+	on_request SimRequestHandler = unsafe { nil }
+	on_start   SimStartHandler   = unsafe { nil }
+	on_finish  SimFinishHandler  = unsafe { nil }
 }
 
 pub fn run(params SimParams, settings RunnerSettings) {
@@ -42,7 +40,7 @@ pub fn run(params SimParams, settings RunnerSettings) {
 
 	if !isnil(settings.on_start) {
 		settings.on_start() or {
-			log(@MOD + '.' + @FN + ': Simulation start handler failed. Error $err')
+			log(@MOD + '.' + @FN + ': Simulation start handler failed. Error ${err}')
 		}
 	}
 
@@ -77,7 +75,7 @@ pub fn run(params SimParams, settings RunnerSettings) {
 				params: params
 			}
 			settings.on_request(request) or {
-				log(@MOD + '.' + @FN + ': request handler failed. Error $err')
+				log(@MOD + '.' + @FN + ': request handler failed. Error ${err}')
 				bmark.fail()
 				break
 			}
@@ -90,7 +88,7 @@ pub fn run(params SimParams, settings RunnerSettings) {
 
 	if !isnil(settings.on_finish) {
 		settings.on_finish() or {
-			log(@MOD + '.' + @FN + ': Simulation stop handler failed. Error $err')
+			log(@MOD + '.' + @FN + ': Simulation stop handler failed. Error ${err}')
 		}
 	}
 }

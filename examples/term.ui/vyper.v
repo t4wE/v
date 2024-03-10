@@ -3,16 +3,14 @@ import term.ui as termui
 import rand
 
 // define some global constants
-const (
-	block_size = 1
-	buffer     = 10
-	green      = termui.Color{0, 255, 0}
-	grey       = termui.Color{150, 150, 150}
-	white      = termui.Color{255, 255, 255}
-	blue       = termui.Color{0, 0, 255}
-	red        = termui.Color{255, 0, 0}
-	black      = termui.Color{0, 0, 0}
-)
+const block_size = 1
+const buffer = 10
+const green = termui.Color{0, 255, 0}
+const grey = termui.Color{150, 150, 150}
+const white = termui.Color{255, 255, 255}
+const blue = termui.Color{0, 0, 255}
+const red = termui.Color{255, 0, 0}
+const black = termui.Color{0, 0, 0}
 
 // what edge of the screen are you facing
 enum Orientation {
@@ -71,7 +69,7 @@ mut:
 // snake representation
 struct Snake {
 mut:
-	app       &App
+	app       &App = unsafe { nil }
 	direction Orientation
 	body      []BodyPart
 	velocity  Vec = Vec{
@@ -247,7 +245,7 @@ mut:
 	}
 	captured bool
 	color    termui.Color = grey
-	app      &App
+	app      &App = unsafe { nil }
 }
 
 // randomize spawn the rat in a new spot within the playable field
@@ -256,10 +254,10 @@ fn (mut r Rat) randomize() {
 		r.app.height - block_size - buffer)
 }
 
-[heap]
+@[heap]
 struct App {
 mut:
-	termui &termui.Context = unsafe { 0 }
+	termui &termui.Context = unsafe { nil }
 	snake  Snake
 	rat    Rat
 	width  int
@@ -286,8 +284,7 @@ fn (mut a App) new_game() {
 }
 
 // initialize the app and record the width and height of the window
-fn init(x voidptr) {
-	mut app := &App(x)
+fn init(mut app App) {
 	w, h := app.termui.window_width, app.termui.window_height
 	app.width = w
 	app.height = h
@@ -295,8 +292,7 @@ fn init(x voidptr) {
 }
 
 // event handles different events for the app as they occur
-fn event(e &termui.Event, x voidptr) {
-	mut app := &App(x)
+fn event(e &termui.Event, mut app App) {
 	match e.typ {
 		.mouse_down {}
 		.mouse_drag {}
@@ -324,8 +320,7 @@ fn event(e &termui.Event, x voidptr) {
 }
 
 // frame perform actions on every tick
-fn frame(x voidptr) {
-	mut app := &App(x)
+fn frame(mut app App) {
 	app.update()
 	app.draw()
 }
@@ -436,7 +431,7 @@ fn (mut a App) draw_debug() {
 	snake := a.snake
 	a.termui.draw_text(block_size, 1 * block_size, 'Display_width: ${a.width:04d} Display_height: ${a.height:04d}')
 	a.termui.draw_text(block_size, 2 * block_size, 'Vx: ${snake.velocity.x:+02d} Vy: ${snake.velocity.y:+02d}')
-	a.termui.draw_text(block_size, 3 * block_size, 'F: $snake.direction')
+	a.termui.draw_text(block_size, 3 * block_size, 'F: ${snake.direction}')
 	snake_head := snake.get_head()
 	rat := a.rat
 	a.termui.draw_text(block_size, 4 * block_size, 'Sx: ${snake_head.pos.x:+03d} Sy: ${snake_head.pos.y:+03d}')
@@ -461,15 +456,21 @@ fn (mut a App) draw_gameover() {
 	a.termui.draw_text(start_x, (a.height / 2) + 3 * block_size, '   #####  #    # #    # ######   #######   ##   ###### #    #  ')
 }
 
+type InitFn = fn (voidptr)
+
+type EventFn = fn (&termui.Event, voidptr)
+
+type FrameFn = fn (voidptr)
+
 fn main() {
 	mut app := &App{}
 	app.termui = termui.init(
 		user_data: app
-		event_fn: event
-		frame_fn: frame
-		init_fn: init
+		event_fn: EventFn(event)
+		frame_fn: FrameFn(frame)
+		init_fn: InitFn(init)
 		hide_cursor: true
 		frame_rate: 10
 	)
-	app.termui.run()?
+	app.termui.run()!
 }

@@ -1,8 +1,6 @@
 import time
 
-const (
-	iterations_per_thread = 100000
-)
+const iterations_per_thread = 100000
 
 fn add_elements(shared foo []int, n int) {
 	for _ in 0 .. iterations_per_thread {
@@ -13,8 +11,8 @@ fn add_elements(shared foo []int, n int) {
 
 fn test_autolocked_array() {
 	shared abc := &[0]
-	go add_elements(shared abc, 1)
-	go add_elements(shared abc, 3)
+	spawn add_elements(shared abc, 1)
+	spawn add_elements(shared abc, 3)
 	for _ in 0 .. iterations_per_thread {
 		abc << 0
 	}

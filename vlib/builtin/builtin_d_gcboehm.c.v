@@ -18,60 +18,82 @@ $if dynamic_boehm ? {
 			#flag @VEXEROOT/thirdparty/libgc/gc.o
 		}
 	} $else {
-		$if $pkgconfig('bdw-gc') {
+		$if $pkgconfig('bdw-gc-threaded') {
+			#pkgconfig bdw-gc-threaded
+		} $else $if $pkgconfig('bdw-gc') {
 			#pkgconfig bdw-gc
 		} $else {
 			$if openbsd || freebsd {
 				#flag -I/usr/local/include
 				#flag -L/usr/local/lib
 			}
-			#flag -lgc
+			$if freebsd {
+				#flag -lgc-threaded
+			} $else {
+				#flag -lgc
+			}
 		}
 	}
 } $else {
-	#flag -DGC_BUILTIN_ATOMIC=1
-
 	$if macos || linux {
+		#flag -DGC_BUILTIN_ATOMIC=1
 		#flag -I @VEXEROOT/thirdparty/libgc/include
-		$if (!macos && prod && !tinyc && !debug) || !(amd64 || arm64 || i386 || arm32) {
+		$if (prod && !tinyc && !debug) || !(amd64 || arm64 || i386 || arm32) {
 			// TODO: replace the architecture check with a `!$exists("@VEXEROOT/thirdparty/tcc/lib/libgc.a")` comptime call
 			#flag @VEXEROOT/thirdparty/libgc/gc.o
 		} $else {
 			#flag @VEXEROOT/thirdparty/tcc/lib/libgc.a
 		}
+		$if macos {
+			#flag -DMPROTECT_VDB=1
+		}
 		#flag -ldl
 		#flag -lpthread
 	} $else $if freebsd {
 		// Tested on FreeBSD 13.0-RELEASE-p3, with clang, gcc and tcc:
+		#flag -DGC_BUILTIN_ATOMIC=1
 		#flag -DBUS_PAGE_FAULT=T_PAGEFLT
 		$if !tinyc {
+			#flag -DUSE_MMAP
 			#flag -I @VEXEROOT/thirdparty/libgc/include
 			#flag @VEXEROOT/thirdparty/libgc/gc.o
 		}
 		$if tinyc {
 			#flag -I/usr/local/include
-			#flag $first_existing("/usr/local/lib/libgc.a", "/usr/lib/libgc.a")
-			#flag -lgc
+			#flag $first_existing("/usr/local/lib/libgc-threaded.a", "/usr/lib/libgc-threaded.a")
+			#flag -lgc-threaded
 		}
 		#flag -lpthread
 	} $else $if openbsd {
+		#flag -DGC_BUILTIN_ATOMIC=1
 		#flag -I/usr/local/include
 		#flag $first_existing("/usr/local/lib/libgc.a", "/usr/lib/libgc.a")
 		#flag -lpthread
 	} $else $if windows {
 		#flag -DGC_NOT_DLL=1
 		#flag -DGC_WIN32_THREADS=1
+		#flag -luser32
 		$if tinyc {
+			#flag -DGC_BUILTIN_ATOMIC=1
 			#flag -I @VEXEROOT/thirdparty/libgc/include
 			#flag @VEXEROOT/thirdparty/tcc/lib/libgc.a
-			#flag -luser32
+		} $else $if msvc {
+			// Build libatomic_ops
+			#flag @VEXEROOT/thirdparty/libatomic_ops/atomic_ops.o
+			#flag -I  @VEXEROOT/thirdparty/libatomic_ops
+
+			#flag -I @VEXEROOT/thirdparty/libgc/include
+			#flag @VEXEROOT/thirdparty/libgc/gc.o
 		} $else {
+			#flag -DGC_BUILTIN_ATOMIC=1
 			#flag -I @VEXEROOT/thirdparty/libgc/include
 			#flag @VEXEROOT/thirdparty/libgc/gc.o
 		}
 	} $else $if $pkgconfig('bdw-gc') {
+		#flag -DGC_BUILTIN_ATOMIC=1
 		#pkgconfig bdw-gc
 	} $else {
+		#flag -DGC_BUILTIN_ATOMIC=1
 		#flag -lgc
 	}
 }
@@ -81,6 +103,7 @@ $if gcboehm_leak ? {
 }
 
 #include <gc.h>
+// #include <gc/gc_mark.h>
 
 // replacements for `malloc()/calloc()`, `realloc()` and `free()`
 // for use with Boehm-GC
@@ -111,9 +134,60 @@ fn C.GC_is_disabled() int
 // protect memory block from being freed before this call
 fn C.GC_reachable_here(voidptr)
 
+// gc_collect explicitly performs a garbage collection run.
+// Note, that garbage collections are done automatically when needed in most cases,
+// so usually you should need to call that function often.
+pub fn gc_collect() {
+	C.GC_gcollect()
+}
+
 // for leak detection it is advisable to do explicit garbage collections
 pub fn gc_check_leaks() {
 	$if gcboehm_leak ? {
 		C.GC_gcollect()
 	}
 }
+
+fn C.GC_get_heap_usage_safe(pheap_size &usize, pfree_bytes &usize, punmapped_bytes &usize, pbytes_since_gc &usize, ptotal_bytes &usize)
+fn C.GC_get_memory_use() usize
+
+pub struct C.GC_stack_base {
+	mem_base voidptr
+	// reg_base voidptr
+}
+
+fn C.GC_get_stack_base(voidptr)
+fn C.GC_register_my_thread(voidptr) int
+fn C.GC_unregister_my_thread() int
+
+// fn C.GC_get_my_stackbottom(voidptr) voidptr
+// fn C.GC_set_stackbottom(voidptr, voidptr)
+// fn C.GC_push_all_stacks()
+
+fn C.GC_add_roots(voidptr, voidptr)
+fn C.GC_remove_roots(voidptr, voidptr)
+
+// fn C.GC_get_push_other_roots() fn()
+// fn C.GC_set_push_other_roots(fn())
+
+fn C.GC_get_sp_corrector() fn (voidptr, voidptr)
+fn C.GC_set_sp_corrector(fn (voidptr, voidptr))
+
+// GC warnings are silenced by default, but can be redirected to a custom cb function by programs too:
+type FnGC_WarnCB = fn (msg &char, arg usize)
+
+fn C.GC_get_warn_proc() FnGC_WarnCB
+fn C.GC_set_warn_proc(cb FnGC_WarnCB)
+
+// gc_get_warn_proc returns the current callback fn, that will be used for printing GC warnings
+pub fn gc_get_warn_proc() FnGC_WarnCB {
+	return C.GC_get_warn_proc()
+}
+
+// gc_set_warn_proc sets the callback fn, that will be used for printing GC warnings
+pub fn gc_set_warn_proc(cb FnGC_WarnCB) {
+	C.GC_set_warn_proc(cb)
+}
+
+// used by builtin_init:
+fn internal_gc_warn_proc_none(msg &char, arg usize) {}

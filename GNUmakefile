@@ -7,13 +7,16 @@ VC     ?= ./vc
 VEXE   ?= ./v
 VCREPO ?= https://github.com/vlang/vc
 TCCREPO ?= https://github.com/vlang/tccbin
+LEGACYREPO ?= https://github.com/macports/macports-legacy-support
 
 VCFILE := v.c
 TMPTCC := $(VROOT)/thirdparty/tcc
+LEGACYLIBS := $(VROOT)/thirdparty/legacy
+TMPLEGACY := $(LEGACYLIBS)/source
 TCCOS := unknown
 TCCARCH := unknown
 GITCLEANPULL := git clean -xf && git pull --quiet
-GITFASTCLONE := git clone --depth 1 --quiet --single-branch
+GITFASTCLONE := git clone --filter=blob:none --quiet
 
 #### Platform detections and overrides:
 _SYS := $(shell uname 2>/dev/null || echo Unknown)
@@ -36,6 +39,9 @@ endif
 ifeq ($(_SYS),Darwin)
 MAC := 1
 TCCOS := macos
+ifeq ($(shell expr $(shell uname -r | cut -d. -f1) \<= 15), 1)
+LEGACY := 1
+endif
 endif
 
 ifeq ($(_SYS),FreeBSD)
@@ -45,6 +51,11 @@ endif
 
 ifeq ($(_SYS),NetBSD)
 TCCOS := netbsd
+LDFLAGS += -lexecinfo
+endif
+
+ifeq ($(_SYS),OpenBSD)
+TCCOS := openbsd
 LDFLAGS += -lexecinfo
 endif
 
@@ -79,23 +90,29 @@ endif
 endif
 endif
 
-.PHONY: all clean check fresh_vc fresh_tcc check_for_working_tcc
+.PHONY: all clean rebuild check fresh_vc fresh_tcc fresh_legacy check_for_working_tcc
 
 ifdef prod
 VFLAGS+=-prod
 endif
 
-all: latest_vc latest_tcc
+all: latest_vc latest_tcc latest_legacy
 ifdef WIN32
-	$(CC) $(CFLAGS) -std=c99 -municode -w -o v1.exe $(VC)/$(VCFILE) $(LDFLAGS)
+	$(CC) $(CFLAGS) -std=c99 -municode -w -o v1.exe $(VC)/$(VCFILE) $(LDFLAGS) -lws2_32
 	v1.exe -no-parallel -o v2.exe $(VFLAGS) cmd/v
 	v2.exe -o $(VEXE) $(VFLAGS) cmd/v
-	del v1.exe
-	del v2.exe
+	$(RM) v1.exe
+	$(RM) v2.exe
 else
+ifdef LEGACY
+	$(MAKE) -C $(TMPLEGACY)
+	$(MAKE) -C $(TMPLEGACY) PREFIX=$(realpath $(LEGACYLIBS)) CFLAGS=$(CFLAGS) LDFLAGS=$(LDFLAGS) install
+	rm -rf $(TMPLEGACY)
+	$(eval override LDFLAGS+=-L$(realpath $(LEGACYLIBS))/lib -lMacportsLegacySupport)
+endif
 	$(CC) $(CFLAGS) -std=gnu99 -w -o v1.exe $(VC)/$(VCFILE) -lm -lpthread $(LDFLAGS)
 	./v1.exe -no-parallel -o v2.exe $(VFLAGS) cmd/v
-	./v2.exe -o $(VEXE) $(VFLAGS) cmd/v
+	./v2.exe -nocache -o $(VEXE) $(VFLAGS) cmd/v
 	rm -rf v1.exe v2.exe
 endif
 	@$(VEXE) run cmd/tools/detect_tcc.v
@@ -104,7 +121,10 @@ endif
 
 clean:
 	rm -rf $(TMPTCC)
+	rm -rf $(LEGACYLIBS)
 	rm -rf $(VC)
+
+rebuild: clean all
 
 ifndef local
 latest_vc: $(VC)/.git/config
@@ -134,7 +154,7 @@ endif
 fresh_tcc:
 	rm -rf $(TMPTCC)
 ifndef local
-# Check wether a TCC branch exists for the user's system configuration.
+# Check whether a TCC branch exists for the user's system configuration.
 ifneq (,$(findstring thirdparty-$(TCCOS)-$(TCCARCH), $(shell git ls-remote --heads $(TCCREPO) | sed 's/^[a-z0-9]*\trefs.heads.//')))
 	$(GITFASTCLONE) --branch thirdparty-$(TCCOS)-$(TCCARCH) $(TCCREPO) $(TMPTCC)
 	@$(MAKE) --quiet check_for_working_tcc 2> /dev/null
@@ -148,11 +168,32 @@ else
 	@$(MAKE) --quiet check_for_working_tcc 2> /dev/null
 endif
 
+ifndef local
+latest_legacy: $(TMPLEGACY)/.git/config
+ifdef LEGACY
+	cd $(TMPLEGACY) && $(GITCLEANPULL)
+endif
+else
+latest_legacy:
+ifdef LEGACY
+	@echo "Using local legacysupport"
+endif
+endif
+
+fresh_legacy:
+	rm -rf $(LEGACYLIBS)
+	$(GITFASTCLONE) $(LEGACYREPO) $(TMPLEGACY)
+
 $(TMPTCC)/.git/config:
 	$(MAKE) fresh_tcc
 
 $(VC)/.git/config:
 	$(MAKE) fresh_vc
+
+$(TMPLEGACY)/.git/config:
+ifdef LEGACY
+	$(MAKE) fresh_legacy
+endif
 
 asan:
 	$(MAKE) all CFLAGS='-fsanitize=address,undefined'

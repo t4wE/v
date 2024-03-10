@@ -14,7 +14,7 @@ const double_quote = 34
 
 const double_escape = '\\\\'
 
-[direct_array_access]
+@[direct_array_access]
 pub fn smart_quote(str string, raw bool) string {
 	len := str.len
 	if len == 0 {
@@ -24,8 +24,7 @@ pub fn smart_quote(str string, raw bool) string {
 		mut is_pure := true
 		for i := 0; i < len; i++ {
 			ch := u8(str[i])
-			if (ch >= 37 && ch <= 90) || (ch >= 95 && ch <= 126)
-				|| (ch in [` `, `!`, `#`, `[`, `]`]) {
+			if (ch >= 37 && ch <= 90) || (ch >= 95 && ch <= 126) || ch in [` `, `!`, `#`, `[`, `]`] {
 				// safe punctuation + digits + big latin letters,
 				// small latin letters + more safe punctuation,
 				// important punctuation exceptions, that are not
@@ -76,6 +75,7 @@ pub fn smart_quote(str string, raw bool) string {
 			}
 			if next == util.backslash {
 				// escaped backslash - keep as is
+				current = 0
 				skip_next = true
 				result.write_string(util.double_escape)
 				continue
@@ -87,6 +87,7 @@ pub fn smart_quote(str string, raw bool) string {
 					continue
 				}
 				if next in util.invalid_escapes {
+					current = 0
 					skip_next = true
 					result.write_u8(next)
 					continue
@@ -95,6 +96,7 @@ pub fn smart_quote(str string, raw bool) string {
 				skip_next = true
 				result.write_u8(current)
 				result.write_u8(next)
+				current = 0
 				continue
 			}
 		}
@@ -119,13 +121,6 @@ pub fn smart_quote(str string, raw bool) string {
 					result.write_u8(current)
 					continue
 				}
-			}
-			if current == util.backslash_r && next == util.backslash_n {
-				// Windows style new line \r\n
-				skip_next = true
-				result.write_u8(util.backslash)
-				result.write_u8(`n`)
-				continue
 			}
 		}
 		result.write_u8(current)

@@ -2,18 +2,17 @@ import term.ui as tui
 
 struct App {
 mut:
-	tui &tui.Context = unsafe { 0 }
+	tui &tui.Context = unsafe { nil }
 }
 
-fn event(e &tui.Event, x voidptr) {
-	mut app := &App(x)
+fn event(e &tui.Event, mut app App) {
 	app.tui.clear()
 	app.tui.set_cursor_position(0, 0)
 	app.tui.write('V term.input event viewer (press `esc` to exit)\n\n')
-	app.tui.write('$e')
-	app.tui.write('\n\nRaw event bytes: "$e.utf8.bytes().hex()" = $e.utf8.bytes()')
+	app.tui.write('${e}')
+	app.tui.write('\n\nRaw event bytes: "${e.utf8.bytes().hex()}" = ${e.utf8.bytes()}')
 	if !e.modifiers.is_empty() {
-		app.tui.write('\nModifiers: $e.modifiers = ')
+		app.tui.write('\nModifiers: ${e.modifiers} = ')
 		if e.modifiers.has(.ctrl) {
 			app.tui.write('ctrl. ')
 		}
@@ -31,11 +30,13 @@ fn event(e &tui.Event, x voidptr) {
 	}
 }
 
+type EventFn = fn (&tui.Event, voidptr)
+
 fn main() {
 	mut app := &App{}
 	app.tui = tui.init(
 		user_data: app
-		event_fn: event
+		event_fn: EventFn(event)
 		window_title: 'V term.ui event viewer'
 		hide_cursor: true
 		capture_events: true
@@ -43,5 +44,5 @@ fn main() {
 		use_alternate_buffer: false
 	)
 	println('V term.ui event viewer (press `esc` to exit)\n\n')
-	app.tui.run()?
+	app.tui.run()!
 }

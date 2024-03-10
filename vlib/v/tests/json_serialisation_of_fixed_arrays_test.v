@@ -10,7 +10,7 @@ struct Fixed_Array {
 	abc [5]Abc
 }
 
-fn test_json_serialisation_of_fixed_arrays() ? {
+fn test_json_serialisation_of_fixed_arrays() {
 	a := Fixed_Array{[
 		Abc{
 			my_ints: [1, 2, 3, 4, 5, 6]!
@@ -40,7 +40,7 @@ fn test_json_serialisation_of_fixed_arrays() ? {
 	]!}
 	s := json.encode(a)
 	dump(s)
-	b := json.decode(Fixed_Array, s)?
+	b := json.decode(Fixed_Array, s)!
 	dump(b)
 	assert a == b
 }

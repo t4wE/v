@@ -51,7 +51,7 @@ fn test_match_integers() {
 		}
 		else {
 			a = 3
-			println('a is $a')
+			println('a is ${a}')
 		}
 	}
 	assert a == 3
@@ -104,7 +104,7 @@ fn test_match_enums() {
 			b = .blue
 		}
 		else {
-			println('b is $b.str()')
+			println('b is ${b.str()}')
 			b = .red
 		}
 	}
@@ -114,7 +114,7 @@ fn test_match_enums() {
 			b = .green
 		}
 		else {
-			println('b is $b.str()')
+			println('b is ${b.str()}')
 			b = .blue
 		}
 	}
@@ -242,9 +242,7 @@ fn test_sub_expression() {
 	assert c
 }
 
-const (
-	one = 'one'
-)
+const one = 'one'
 
 fn test_match_constant_string() {
 	match one {
@@ -300,4 +298,24 @@ fn test_noreturn() {
 			exit(0)
 		}
 	}
+}
+
+// for test the returns both interface and non-interface
+interface Any {}
+
+fn test_returns_both_interface_and_non_interface() {
+	any := Any('abc')
+
+	mut res := match any {
+		string { any }
+		else { 'literal' }
+	}
+	assert res == 'abc'
+
+	variable := ''
+	res = match any {
+		string { any }
+		else { variable }
+	}
+	assert res == 'abc'
 }

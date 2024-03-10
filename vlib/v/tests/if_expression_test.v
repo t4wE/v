@@ -192,7 +192,7 @@ fn test_if_epxr_with_array_conditions() {
 	}
 }
 
-fn min<T>(a T, b T) T {
+fn min[T](a T, b T) T {
 	return if a < b { a } else { b }
 }
 
@@ -214,15 +214,15 @@ fn test_if_expr_with_complex_array_methods() {
 	assert ret == ['a', 'b', 'c']
 }
 
-fn return_optional() ?int {
+fn return_option() ?int {
 	return 1
 }
 
-fn test_if_expr_with_optional() ? {
+fn test_if_expr_with_option() {
 	m := map[string]int{}
 	v := if a := m['a'] {
-		println('$a')
-		return_optional()?
+		println('${a}')
+		return_option()?
 	} else {
 		2
 	}
@@ -231,13 +231,13 @@ fn test_if_expr_with_optional() ? {
 
 fn test_if_expr_with_or_block() {
 	arr := ['a']
-	a := if arr.len == 0 || arr[0] == '-' { 123 } else { return_optional() or { -1 } }
+	a := if arr.len == 0 || arr[0] == '-' { 123 } else { return_option() or { -1 } }
 	assert a == 1
 }
 
 type Num = f32 | f64 | i64 | int
 
-[noreturn]
+@[noreturn]
 fn assert_false_noreturn() {
 	assert false
 	exit(1)
@@ -262,4 +262,14 @@ fn test_noreturn() {
 	} else {
 		assert_false_noreturn()
 	}
+}
+
+// for issue 20300
+// Phenomenon of issue:
+// infix expr generates wraparound parentheses, but misses the case where `array_contains()` is used.
+fn test_in_array_init() {
+	if 0 in []int{} {
+		assert false
+	}
+	assert true
 }

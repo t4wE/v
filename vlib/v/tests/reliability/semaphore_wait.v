@@ -42,11 +42,9 @@ mut:
 	nxt []&PtrObj
 }
 
-const (
-	log2n = 9
-	n     = 1 << log2n
-	n4    = f64(u64(1) << (4 * log2n))
-)
+const log2n = 9
+const n = 1 << log2n
+const n4 = f64(u64(1) << (4 * log2n))
 
 fn waste_mem() {
 	mut objs := PtrPtrObj{
@@ -80,11 +78,11 @@ fn do_rec(mut sem sync.Semaphore, timed bool) {
 		}
 		end := time.sys_mono_now()
 		dur := f64(end - start) / f64(time.millisecond)
-		res_str := if timed { ' result: `$r`' } else { '' }
+		res_str := if timed { ' result: `${r}`' } else { '' }
 		if dur < 450.0 || dur > 550.0 {
-			eprintln('Problem: time: ${dur:.3f}$res_str')
+			eprintln('Problem: time: ${dur:.3f}${res_str}')
 		} else {
-			eprintln('time: ${dur:.3f}$res_str')
+			eprintln('time: ${dur:.3f}${res_str}')
 		}
 		start = end
 	}
@@ -125,10 +123,10 @@ fn main() {
 		exit(1)
 	}
 	mut sem := sync.new_semaphore()
-	go do_rec(mut sem, timed)
-	go do_send(mut sem)
+	spawn do_rec(mut sem, timed)
+	spawn do_send(mut sem)
 	for _ in 0 .. 4 {
-		go waste_mem()
+		spawn waste_mem()
 	}
 	mut last := time.sys_mono_now()
 	for _ in 0 .. n_iterations {

@@ -1,7 +1,7 @@
 module main
 
 struct Article {
-	id    int    [primary; sql: serial]
+	id    int    @[primary; sql: serial]
 	title string
 	text  string
 }
@@ -9,5 +9,5 @@ struct Article {
 pub fn (app &App) find_all_articles() []Article {
 	return sql app.db {
 		select from Article
-	}
+	} or { []Article{} }
 }

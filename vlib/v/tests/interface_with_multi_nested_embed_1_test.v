@@ -12,7 +12,7 @@ fn test_interface_with_multi_nested_embed() {
 	win.init()
 }
 
-[heap]
+@[heap]
 pub struct Window {
 mut:
 	initables []&Initable
@@ -61,7 +61,7 @@ pub struct Base {
 
 pub fn (mut b Base) init(window &Window) {}
 
-[heap]
+@[heap]
 pub struct Label {
 	Base
 }
@@ -70,7 +70,7 @@ pub interface Layoutable {
 	get_pos() (int, int)
 }
 
-[heap]
+@[heap]
 pub struct LinearLayout {
 	Base
 mut:
@@ -84,7 +84,7 @@ pub fn (mut ll LinearLayout) add(mut l Layoutable) {
 pub fn (mut ll LinearLayout) layout() {
 	for mut wl in ll.layoutables {
 		x, y := wl.get_pos()
-		println('$x, $y')
+		println('${x}, ${y}')
 		assert x == 10
 		assert y == 20
 	}

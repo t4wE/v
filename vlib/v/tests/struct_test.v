@@ -18,8 +18,8 @@ mut:
 }
 
 struct Lol {
-	b []string [json: lol]
-	c string   [json: cc]
+	b []string @[json: lol]
+	c string   @[json: cc]
 	d int
 }
 
@@ -186,11 +186,9 @@ fn test_assoc_with_vars() {
 	assert merged2.b == 200
 }
 
-const (
-	const_def = Def{
-		a: 100
-	}
-)
+const const_def = Def{
+	a: 100
+}
 
 fn test_assoc_with_constants() {
 	println(1)
@@ -223,13 +221,13 @@ fn fooo() {
 }
 
 /*
-[typedef]
-struct C.fixed {
+@[typedef]
+pub struct C.fixed {
 	points [10]C.point
 }
 
-[typedef]
-struct C.point {
+@[typedef]
+pub struct C.point {
 	x int
 	y int
 }
@@ -244,7 +242,7 @@ fn test_fixed_field() {
 	//}
 }
 */
-[params]
+@[params]
 struct Config {
 mut:
 	n   int
@@ -312,40 +310,40 @@ fn test_levels() {
 	}
 }
 
-// Struct where an inizialized field is after a non-initilized field.
+// Struct where an initialized field is after a non-initialized field.
 struct StructWithDefaultValues1 {
-	field_required int
-	field_optional int = 5
+	field_uninitialized int
+	field_initialized   int = 5
 }
 
-// Struct where an inizialized field is before a non-initilized field.
+// Struct where an initialized field is before a non-initialized field.
 struct StructWithDefaultValues2 {
-	field_optional int = 3
-	field_required int
+	field_initialized   int = 3
+	field_uninitialized int
 }
 
-// Struct where an inizialized field is before several non-initilized fields.
+// Struct where an initialized field is before several non-initialized fields.
 struct StructWithDefaultValues3 {
-	field_optional     int = 2
-	field_required     int
-	field_required_too int
+	field_initialized       int = 2
+	field_uninitialized     int
+	field_uninitialized_too int
 }
 
 fn test_struct_with_default_values_init() {
 	s1 := StructWithDefaultValues1{
-		field_required: 5
+		field_uninitialized: 5
 	}
 	s2 := StructWithDefaultValues2{
-		field_required: 5
+		field_uninitialized: 5
 	}
 	// Partially initialized
 	s3 := StructWithDefaultValues3{
-		field_required: 5
+		field_uninitialized: 5
 	}
 
-	assert s1.field_optional == 5
-	assert s2.field_optional == 3
-	assert s3.field_optional == 2
+	assert s1.field_initialized == 5
+	assert s2.field_initialized == 3
+	assert s3.field_initialized == 2
 }
 
 fn test_struct_with_default_values_no_init() {
@@ -354,19 +352,19 @@ fn test_struct_with_default_values_no_init() {
 	s2 := StructWithDefaultValues2{}
 	s3 := StructWithDefaultValues3{}
 
-	assert s1.field_optional == 5
-	assert s2.field_optional == 3
-	assert s3.field_optional == 2
+	assert s1.field_initialized == 5
+	assert s2.field_initialized == 3
+	assert s3.field_initialized == 2
 }
 
-struct FieldsWithOptionalVoidReturnType {
-	f fn () ?
-	g fn () ?
+struct FieldsWithOptionVoidReturnType {
+	f fn () ! @[required]
+	g fn () ? @[required]
 }
 
-fn test_fields_anon_fn_with_optional_void_return_type() {
-	foo := FieldsWithOptionalVoidReturnType{
-		f: fn () ? {
+fn test_fields_anon_fn_with_option_void_return_type() {
+	foo := FieldsWithOptionVoidReturnType{
+		f: fn () ! {
 			return error('oops')
 		}
 		g: fn () ? {
@@ -396,7 +394,7 @@ fn test_fields_array_of_fn() {
 		show: [a, b]
 	}
 	println(commands.show)
-	assert '$commands.show' == '[fn () string, fn () string]'
+	assert '${commands.show}' == '[fn () string, fn () string]'
 }
 
 fn test_struct_update() {
@@ -416,7 +414,7 @@ fn test_struct_update() {
 // Test anon structs
 struct Book {
 	x      Foo
-	author struct  {
+	author struct {
 		name string
 		age  int
 	}

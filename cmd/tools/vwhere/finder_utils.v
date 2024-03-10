@@ -2,7 +2,6 @@ module main
 
 import os
 import term
-import v.pref
 import os.cmdline
 
 // Symbol type to search
@@ -31,38 +30,36 @@ enum Mutability {
 	not
 }
 
-const (
-	_args   = os.args
-	verbose = '-v' in cmdline.only_options(_args)
-	header  = '-h' in cmdline.only_options(_args)
-	format  = '-f' in cmdline.only_options(_args)
-	symbols = {
-		'fn':        Symbol.@fn
-		'method':    .method
-		'struct':    .@struct
-		'interface': .@interface
-		'enum':      .@enum
-		'const':     .@const
-		'var':       .var
-		'regexp':    .regexp
-	}
-	visibilities = {
-		'all': Visibility.all
-		'pub': .@pub
-		'pri': .pri
-	}
-	mutabilities = {
-		'any': Mutability.any
-		'yes': .yes
-		'not': .not
-	}
-	vexe        = pref.vexe_path()
-	vlib_dir    = os.join_path(os.dir(vexe), 'vlib')
-	vmod_dir    = os.vmodules_dir()
-	vmod_paths  = os.vmodules_paths()[1..]
-	current_dir = os.abs_path('.')
-	color_out   = term.can_show_color_on_stdout()
-)
+const _args = os.args
+const verbose = '-v' in cmdline.only_options(_args)
+const header = '-h' in cmdline.only_options(_args)
+const format = '-f' in cmdline.only_options(_args)
+const symbols = {
+	'fn':        Symbol.@fn
+	'method':    .method
+	'struct':    .@struct
+	'interface': .@interface
+	'enum':      .@enum
+	'const':     .@const
+	'var':       .var
+	'regexp':    .regexp
+}
+const visibilities = {
+	'all': Visibility.all
+	'pub': .@pub
+	'pri': .pri
+}
+const mutabilities = {
+	'any': Mutability.any
+	'yes': .yes
+	'not': .not
+}
+const vexe = os.real_path(os.getenv_opt('VEXE') or { @VEXE })
+const vlib_dir = os.join_path(os.dir(vexe), 'vlib')
+const vmod_dir = os.vmodules_dir()
+const vmod_paths = os.vmodules_paths()[1..]
+const current_dir = os.abs_path('.')
+const color_out = term.can_show_color_on_stdout()
 
 fn (mut cfg Symbol) set_from_str(str_in string) {
 	if str_in !in symbols {
@@ -145,7 +142,7 @@ fn maybe_color(term_color fn (string) string, str string) string {
 	}
 }
 
-fn collect_v_files(path string, recursive bool) ?[]string {
+fn collect_v_files(path string, recursive bool) ![]string {
 	if path.len == 0 {
 		return error('path cannot be empty')
 	}
@@ -153,7 +150,7 @@ fn collect_v_files(path string, recursive bool) ?[]string {
 		return error('path does not exist or is not a directory')
 	}
 	mut all_files := []string{}
-	mut entries := os.ls(path)?
+	mut entries := os.ls(path)!
 	mut local_path_separator := os.path_separator
 	if path.ends_with(os.path_separator) {
 		local_path_separator = ''
@@ -161,7 +158,7 @@ fn collect_v_files(path string, recursive bool) ?[]string {
 	for entry in entries {
 		file := path + local_path_separator + entry
 		if os.is_dir(file) && !os.is_link(file) && recursive {
-			all_files << collect_v_files(file, recursive)?
+			all_files << collect_v_files(file, recursive)!
 		} else if os.exists(file) && (file.ends_with('.v') || file.ends_with('.vsh')) {
 			all_files << file
 		}
@@ -169,7 +166,7 @@ fn collect_v_files(path string, recursive bool) ?[]string {
 	return all_files
 }
 
-fn resolve_module(path string) ?string {
+fn resolve_module(path string) !string {
 	if os.is_dir(path) {
 		return path
 	} else if os.is_dir(os.join_path(vmod_dir, path)) {
@@ -177,6 +174,6 @@ fn resolve_module(path string) ?string {
 	} else if os.is_dir(os.join_path(vlib_dir, path)) {
 		return os.join_path(vlib_dir, path)
 	} else {
-		return error('Path: $path not found')
+		return error('Path: ${path} not found')
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module builder
@@ -10,10 +10,10 @@ import v.checker
 
 pub type FnBackend = fn (mut b Builder)
 
-pub fn compile(command string, pref &pref.Preferences, backend_cb FnBackend) {
-	check_if_output_folder_is_writable(pref)
+pub fn compile(command string, pref_ &pref.Preferences, backend_cb FnBackend) {
+	check_if_output_folder_is_writable(pref_)
 	// Construct the V object from command line arguments
-	mut b := new_builder(pref)
+	mut b := new_builder(pref_)
 	if b.should_rebuild() {
 		b.rebuild(backend_cb)
 	}
@@ -23,22 +23,22 @@ pub fn compile(command string, pref &pref.Preferences, backend_cb FnBackend) {
 	b.run_compiled_executable_and_exit()
 }
 
-fn check_if_output_folder_is_writable(pref &pref.Preferences) {
-	odir := os.dir(pref.out_name)
+fn check_if_output_folder_is_writable(pref_ &pref.Preferences) {
+	odir := os.dir(pref_.out_name)
 	// When pref.out_name is just the name of an executable, i.e. `./v -o executable main.v`
 	// without a folder component, just use the current folder instead:
 	mut output_folder := odir
-	if odir.len == pref.out_name.len {
+	if odir.len == pref_.out_name.len {
 		output_folder = os.getwd()
 	}
-	os.is_writable_folder(output_folder) or {
+	os.ensure_folder_is_writable(output_folder) or {
 		// An early error here, is better than an unclear C error later:
 		verror(err.msg())
 	}
 }
 
 // Temporary, will be done by -autofree
-[unsafe]
+@[unsafe]
 fn (mut b Builder) myfree() {
 	// for file in b.parsed_files {
 	// }
@@ -82,47 +82,89 @@ fn (mut b Builder) run_compiled_executable_and_exit() {
 	if !(b.pref.is_test || b.pref.is_run || b.pref.is_crun) {
 		exit(0)
 	}
-	compiled_file := os.real_path(b.pref.out_name)
+	mut compiled_file := b.pref.out_name
+	if b.pref.backend == .wasm && !compiled_file.ends_with('.wasm') {
+		compiled_file += '.wasm'
+	}
+	compiled_file = os.real_path(compiled_file)
+
+	mut run_args := []string{cap: b.pref.run_args.len + 1}
+
 	run_file := if b.pref.backend.is_js() {
 		node_basename := $if windows { 'node.exe' } $else { 'node' }
 		os.find_abs_path_of_executable(node_basename) or {
-			panic('Could not find `$node_basename` in system path. Do you have Node.js installed?')
+			panic('Could not find `${node_basename}` in system path. Do you have Node.js installed?')
 		}
+	} else if b.pref.backend == .wasm {
+		mut actual_run := ['wasmer', 'wasmtime', 'wavm', 'wasm3']
+		mut actual_rf := ''
+
+		// -autofree bug
+		// error: cannot convert 'struct string' to 'struct _option_string'
+		// mut actual_rf := ?string(none)
+
+		for runtime in actual_run {
+			basename := $if windows { runtime + '.exe' } $else { runtime }
+
+			if rf := os.find_abs_path_of_executable(basename) {
+				if basename == 'wavm' {
+					run_args << 'run'
+				}
+				actual_rf = rf
+				break
+			}
+		}
+
+		if actual_rf == '' {
+			panic('Could not find `wasmer`, `wasmtime`, `wavm`, or `wasm3` in system path. Do you have any installed?')
+		}
+
+		actual_rf
 	} else if b.pref.backend == .golang {
 		go_basename := $if windows { 'go.exe' } $else { 'go' }
 		os.find_abs_path_of_executable(go_basename) or {
-			panic('Could not find `$go_basename` in system path. Do you have Go installed?')
+			panic('Could not find `${go_basename}` in system path. Do you have Go installed?')
 		}
 	} else {
 		compiled_file
 	}
-	mut run_args := []string{cap: b.pref.run_args.len + 1}
-	if b.pref.backend.is_js() {
+	if b.pref.backend.is_js() || b.pref.backend == .wasm {
 		run_args << compiled_file
 	} else if b.pref.backend == .golang {
 		run_args << ['run', compiled_file]
 	}
 	run_args << b.pref.run_args
-	mut run_process := os.new_process(run_file)
-	run_process.set_args(run_args)
+
 	if b.pref.is_verbose {
-		println('running $run_process.filename with arguments $run_process.args')
+		println('running ${run_file} with arguments ${run_args.join(' ')}')
 	}
-	// Ignore sigint and sigquit while running the compiled file,
-	// so ^C doesn't prevent v from deleting the compiled file.
-	// See also https://git.musl-libc.org/cgit/musl/tree/src/process/system.c
-	prev_int_handler := os.signal_opt(.int, eshcb) or { serror('set .int', err) }
-	mut prev_quit_handler := os.SignalHandler(eshcb)
-	$if !windows { // There's no sigquit on windows
-		prev_quit_handler = os.signal_opt(.quit, eshcb) or { serror('set .quit', err) }
+	mut ret := 0
+	if b.pref.use_os_system_to_run {
+		command_to_run := run_file + ' ' + run_args.join(' ')
+		ret = os.system(command_to_run)
+		// eprintln('> ret: ${ret:5} | command_to_run: ${command_to_run}')
+	} else {
+		mut run_process := os.new_process(run_file)
+		run_process.set_args(run_args)
+		// Ignore sigint and sigquit while running the compiled file,
+		// so ^C doesn't prevent v from deleting the compiled file.
+		// See also https://git.musl-libc.org/cgit/musl/tree/src/process/system.c
+		prev_int_handler := os.signal_opt(.int, eshcb) or { serror('set .int', err) }
+		mut prev_quit_handler := os.SignalHandler(eshcb)
+		$if !windows { // There's no sigquit on windows
+			prev_quit_handler = os.signal_opt(.quit, eshcb) or { serror('set .quit', err) }
+		}
+		run_process.wait()
+		os.signal_opt(.int, prev_int_handler) or { serror('restore .int', err) }
+		$if !windows {
+			os.signal_opt(.quit, prev_quit_handler) or { serror('restore .quit', err) }
+		}
+		ret = run_process.code
+		if run_process.err != '' {
+			eprintln(run_process.err)
+		}
+		run_process.close()
 	}
-	run_process.wait()
-	os.signal_opt(.int, prev_int_handler) or { serror('restore .int', err) }
-	$if !windows {
-		os.signal_opt(.quit, prev_quit_handler) or { serror('restore .quit', err) }
-	}
-	ret := run_process.code
-	run_process.close()
 	b.cleanup_run_executable_after_exit(compiled_file)
 	exit(ret)
 }
@@ -130,9 +172,9 @@ fn (mut b Builder) run_compiled_executable_and_exit() {
 fn eshcb(_ os.Signal) {
 }
 
-[noreturn]
+@[noreturn]
 fn serror(reason string, e IError) {
-	eprintln('could not $reason handler')
+	eprintln('could not ${reason} handler')
 	panic(e)
 }
 
@@ -141,11 +183,11 @@ fn (mut v Builder) cleanup_run_executable_after_exit(exefile string) {
 		return
 	}
 	if v.pref.reuse_tmpc {
-		v.pref.vrun_elog('keeping executable: $exefile , because -keepc was passed')
+		v.pref.vrun_elog('keeping executable: ${exefile} , because -keepc was passed')
 		return
 	}
 	if !v.executable_exists {
-		v.pref.vrun_elog('remove run executable: $exefile')
+		v.pref.vrun_elog('remove run executable: ${exefile}')
 		os.rm(exefile) or {}
 	}
 }
@@ -173,9 +215,16 @@ pub fn (mut v Builder) set_module_lookup_paths() {
 	v.module_search_paths << v.compiled_dir
 	x := os.join_path(v.compiled_dir, 'modules')
 	if v.pref.is_verbose {
-		println('x: "$x"')
+		println('x: "${x}"')
 	}
-	v.module_search_paths << os.join_path(v.compiled_dir, 'modules')
+
+	if os.exists(os.join_path(v.compiled_dir, 'src/modules')) {
+		v.module_search_paths << os.join_path(v.compiled_dir, 'src/modules')
+	}
+	if os.exists(os.join_path(v.compiled_dir, 'modules')) {
+		v.module_search_paths << os.join_path(v.compiled_dir, 'modules')
+	}
+
 	v.module_search_paths << v.pref.lookup_path
 	if v.pref.is_verbose {
 		v.log('v.module_search_paths:')
@@ -188,7 +237,7 @@ pub fn (v Builder) get_builtin_files() []string {
 		v.log('v.pref.no_builtin is true, get_builtin_files == []')
 		return []
 	}
-	v.log('v.pref.lookup_path: $v.pref.lookup_path')
+	v.log('v.pref.lookup_path: ${v.pref.lookup_path}')
 	// Lookup for built-in folder in lookup path.
 	// Assumption: `builtin/` folder implies usable implementation of builtin
 	for location in v.pref.lookup_path {
@@ -197,6 +246,16 @@ pub fn (v Builder) get_builtin_files() []string {
 			if v.pref.backend.is_js() {
 				builtin_files << v.v_files_from_dir(os.join_path(location, 'builtin',
 					'js'))
+			} else if v.pref.backend == .wasm {
+				builtin_files << v.v_files_from_dir(os.join_path(location, 'builtin',
+					'wasm'))
+				if v.pref.os == .browser {
+					builtin_files << v.v_files_from_dir(os.join_path(location, 'builtin',
+						'wasm', 'browser'))
+				} else {
+					builtin_files << v.v_files_from_dir(os.join_path(location, 'builtin',
+						'wasm', 'wasi'))
+				}
 			} else {
 				builtin_files << v.v_files_from_dir(os.join_path(location, 'builtin'))
 			}
@@ -226,7 +285,7 @@ pub fn (v &Builder) get_user_files() []string {
 		return []
 	}
 	mut dir := v.pref.path
-	v.log('get_v_files($dir)')
+	v.log('get_v_files(${dir})')
 	// Need to store user files separately, because they have to be added after
 	// libs, but we dont know	which libs need to be added yet
 	mut user_files := []string{}
@@ -235,6 +294,9 @@ pub fn (v &Builder) get_user_files() []string {
 	mut preludes_path := os.join_path(vroot, 'vlib', 'v', 'preludes')
 	if v.pref.backend == .js_node {
 		preludes_path = os.join_path(vroot, 'vlib', 'v', 'preludes_js')
+	}
+	if v.pref.trace_calls {
+		user_files << os.join_path(preludes_path, 'trace_calls.v')
 	}
 	if v.pref.is_livemain || v.pref.is_liveshared {
 		user_files << os.join_path(preludes_path, 'live.v')
@@ -246,7 +308,11 @@ pub fn (v &Builder) get_user_files() []string {
 		user_files << os.join_path(preludes_path, 'live_shared.v')
 	}
 	if v.pref.is_test {
-		user_files << os.join_path(preludes_path, 'test_runner.v')
+		if v.pref.backend == .js_node {
+			user_files << os.join_path(preludes_path, 'test_runner.v')
+		} else {
+			user_files << os.join_path(preludes_path, 'test_runner.c.v')
+		}
 		//
 		mut v_test_runner_prelude := os.getenv('VTEST_RUNNER')
 		if v.pref.test_runner != '' {
@@ -260,8 +326,8 @@ pub fn (v &Builder) get_user_files() []string {
 			v_test_runner_prelude = os.join_path(preludes_path, 'test_runner_${v_test_runner_prelude}.v')
 		}
 		if !os.is_file(v_test_runner_prelude) || !os.is_readable(v_test_runner_prelude) {
-			eprintln('test runner error: File $v_test_runner_prelude should be readable.')
-			verror('supported test runners are: tap, json, simple, normal')
+			eprintln('test runner error: File ${v_test_runner_prelude} should be readable.')
+			verror('the supported test runners are: ${pref.supported_test_runners_list()}')
 		}
 		user_files << v_test_runner_prelude
 	}
@@ -277,7 +343,7 @@ pub fn (v &Builder) get_user_files() []string {
 	is_test := v.pref.is_test
 	mut is_internal_module_test := false
 	if is_test {
-		tcontent := util.read_file(dir) or { verror('$dir does not exist') }
+		tcontent := util.read_file(dir) or { verror('${dir} does not exist') }
 		slines := tcontent.split_into_lines()
 		for sline in slines {
 			line := sline.trim_space()
@@ -296,7 +362,7 @@ pub fn (v &Builder) get_user_files() []string {
 		// v volt/slack_test.v: compile all .v files to get the environment
 		single_test_v_file := os.real_path(dir)
 		if v.pref.is_verbose {
-			v.log('> Compiling an internal module _test.v file $single_test_v_file .')
+			v.log('> Compiling an internal module _test.v file ${single_test_v_file} .')
 			v.log('> That brings in all other ordinary .v files in the same module too .')
 		}
 		user_files << single_test_v_file
@@ -304,28 +370,28 @@ pub fn (v &Builder) get_user_files() []string {
 	}
 	does_exist := os.exists(dir)
 	if !does_exist {
-		verror("$dir doesn't exist")
+		verror("${dir} doesn't exist")
 	}
 	is_real_file := does_exist && !os.is_dir(dir)
 	resolved_link := if is_real_file && os.is_link(dir) { os.real_path(dir) } else { dir }
 	if is_real_file && (dir.ends_with('.v') || resolved_link.ends_with('.vsh')
-		|| dir.ends_with('.vv')) {
+		|| v.pref.raw_vsh_tmp_prefix != '' || dir.ends_with('.vv')) {
 		single_v_file := if resolved_link.ends_with('.vsh') { resolved_link } else { dir }
 		// Just compile one file and get parent dir
 		user_files << single_v_file
 		if v.pref.is_verbose {
-			v.log('> just compile one file: "$single_v_file"')
+			v.log('> just compile one file: "${single_v_file}"')
 		}
 	} else if os.is_dir(dir) {
 		if v.pref.is_verbose {
-			v.log('> add all .v files from directory "$dir" ...')
+			v.log('> add all .v files from directory "${dir}" ...')
 		}
 		// Add .v files from the directory being compiled
 		user_files << v.v_files_from_dir(dir)
 	} else {
 		println('usage: `v file.v` or `v directory`')
 		ext := os.file_ext(dir)
-		println('unknown file extension `$ext`')
+		println('unknown file extension `${ext}`')
 		exit(1)
 	}
 	if user_files.len == 0 {
@@ -333,7 +399,7 @@ pub fn (v &Builder) get_user_files() []string {
 		exit(1)
 	}
 	if v.pref.is_verbose {
-		v.log('user_files: $user_files')
+		v.log('user_files: ${user_files}')
 	}
 	return user_files
 }

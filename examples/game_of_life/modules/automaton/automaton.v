@@ -17,7 +17,7 @@ fn new_a2d(maxx int, maxy int) &A2D {
 	}
 }
 
-[inline]
+@[inline]
 pub fn (a &A2D) set(x int, y int, newval int) {
 	unsafe {
 		mut e := &int(0)
@@ -26,7 +26,7 @@ pub fn (a &A2D) set(x int, y int, newval int) {
 	}
 }
 
-[inline]
+@[inline]
 pub fn (a &A2D) get(x int, y int) int {
 	unsafe {
 		mut e := &int(0)
@@ -36,7 +36,7 @@ pub fn (a &A2D) get(x int, y int) int {
 	}
 }
 
-[inline]
+@[inline]
 pub fn (a &A2D) clear() {
 	for y := 0; y < a.maxy; y++ {
 		for x := 0; x < a.maxx; x++ {
@@ -48,8 +48,8 @@ pub fn (a &A2D) clear() {
 // ///////////////////////////////////////////////////////////
 pub struct Automaton {
 pub mut:
-	field     &A2D
-	new_field &A2D
+	field     &A2D = unsafe { nil }
+	new_field &A2D = unsafe { nil }
 }
 
 fn new_automaton(ftext string) Automaton {

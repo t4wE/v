@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module builtin
@@ -21,7 +21,7 @@ pub fn utf32_to_str(code u32) string {
 	}
 }
 
-[manualfree; unsafe]
+@[manualfree; unsafe]
 pub fn utf32_to_str_no_malloc(code u32, buf &u8) string {
 	unsafe {
 		len := utf32_decode_to_buffer(code, buf)
@@ -33,7 +33,7 @@ pub fn utf32_to_str_no_malloc(code u32, buf &u8) string {
 	}
 }
 
-[manualfree; unsafe]
+@[manualfree; unsafe]
 pub fn utf32_decode_to_buffer(code u32, buf &u8) int {
 	unsafe {
 		icode := int(code) // Prevents doing casts everywhere
@@ -66,25 +66,12 @@ pub fn utf32_decode_to_buffer(code u32, buf &u8) int {
 	return 0
 }
 
-// utf8_str_len returns the number of runes contained in the string.
-[deprecated: 'use `string.len_utf8()` instead']
-[deprecated_after: '2022-05-28']
-pub fn utf8_str_len(s string) int {
-	mut l := 0
-	mut i := 0
-	for i < s.len {
-		l++
-		i += ((0xe5000000 >> ((unsafe { s.str[i] } >> 3) & 0x1e)) & 3) + 1
-	}
-	return l
-}
-
 // Convert utf8 to utf32
 // the original implementation did not check for
 // valid utf8 in the string, and could result in
 // values greater than the utf32 spec
 // it has been replaced by `utf8_to_utf32` which
-// has an optional return type.
+// has an option return type.
 //
 // this function is left for backward compatibility
 // it is used in vlib/builtin/string.v,
@@ -98,7 +85,7 @@ pub fn (_rune string) utf32_code() int {
 
 // convert array of utf8 bytes to single utf32 value
 // will error if more than 4 bytes are submitted
-pub fn (_bytes []u8) utf8_to_utf32() ?rune {
+pub fn (_bytes []u8) utf8_to_utf32() !rune {
 	if _bytes.len == 0 {
 		return 0
 	}
@@ -122,29 +109,6 @@ pub fn (_bytes []u8) utf8_to_utf32() ?rune {
 		shift = 6
 	}
 	return res
-}
-
-// Calculate length to read from the first byte
-fn utf8_len(c u8) int {
-	mut b := 0
-	mut x := c
-	if (x & 240) != 0 {
-		// 0xF0
-		x >>= 4
-	} else {
-		b += 4
-	}
-	if (x & 12) != 0 {
-		// 0x0C
-		x >>= 2
-	} else {
-		b += 2
-	}
-	if (x & 2) == 0 {
-		// 0x02
-		b++
-	}
-	return b
 }
 
 // Calculate string length for formatting, i.e. number of "characters"

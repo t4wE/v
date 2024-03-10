@@ -1,12 +1,10 @@
 module gx
 
 // TODO: remove these, and use the enum everywhere
-pub const (
-	align_left  = HorizontalAlign.left
-	align_right = HorizontalAlign.right
-)
+pub const align_left = HorizontalAlign.left
+pub const align_right = HorizontalAlign.right
 
-[params]
+@[params]
 pub struct TextCfg {
 pub:
 	color          Color = black
@@ -20,6 +18,8 @@ pub:
 	italic         bool
 }
 
+// to_css_string returns a CSS compatible string of the TextCfg `cfg`.
+// For example: `'mono 14px serif'`.
 pub fn (cfg TextCfg) to_css_string() string {
 	mut font_style := ''
 	if cfg.bold {
@@ -31,5 +31,5 @@ pub fn (cfg TextCfg) to_css_string() string {
 	if cfg.italic {
 		font_style += 'italic '
 	}
-	return '$font_style ${cfg.size}px $cfg.family'
+	return '${font_style} ${cfg.size}px ${cfg.family}'
 }

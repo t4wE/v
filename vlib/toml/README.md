@@ -1,4 +1,5 @@
 ## Description
+
 `toml` is a fully fledged [TOML v1.0.0](https://toml.io/en/v1.0.0) compatible parser written in pure V.
 The module is tested against the [official compliance tests](https://github.com/toml-lang/compliance).
 
@@ -57,9 +58,9 @@ hosts = [
 fn main() {
 	doc := toml.parse_text(toml_text) or { panic(err) }
 	title := doc.value('title').string()
-	println('title: "$title"')
+	println('title: "${title}"')
 	ip := doc.value('servers.alpha.ip').string()
-	println('Server IP: "$ip"')
+	println('Server IP: "${ip}"')
 }
 ```
 
@@ -79,8 +80,8 @@ To query for a value that might not be in the document you
 can use the `.default_to(...)` function to provide a
 default value.
 
-For cases where a default value might not be appropiate or
-to check if a value exists you can use `doc.value_opt('query')?`
+For cases where a default value might not be appropriate or
+to check if a value exists you can use `doc.value_opt('query')!`
 instead.
 
 ```v

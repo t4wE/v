@@ -20,8 +20,8 @@ pub:
 	compiled_dir string // contains os.real_path() of the dir of the final file being compiled, or the dir itself when doing `v .`
 	module_path  string
 pub mut:
-	checker             &checker.Checker
-	transformer         &transformer.Transformer
+	checker             &checker.Checker = unsafe { nil }
+	transformer         &transformer.Transformer = unsafe { nil }
 	out_name_c          string
 	out_name_js         string
 	stats_lines         int // size of backend generated source code in lines
@@ -29,12 +29,14 @@ pub mut:
 	nr_errors           int // accumulated error count of scanner, parser, checker, and builder
 	nr_warnings         int // accumulated warning count of scanner, parser, checker, and builder
 	nr_notices          int // accumulated notice count of scanner, parser, checker, and builder
-	pref                &pref.Preferences
+	pref                &pref.Preferences = unsafe { nil }
 	module_search_paths []string
 	parsed_files        []&ast.File
-	cached_msvc         MsvcResult
-	table               &ast.Table
-	ccoptions           CcompilerOptions
+	//$if windows {
+	cached_msvc MsvcResult
+	//}
+	table     &ast.Table = unsafe { nil }
+	ccoptions CcompilerOptions
 	//
 	// Note: changes in mod `builtin` force invalidation of every other .v file
 	mod_invalidates_paths map[string][]string // changes in mod `os`, invalidate only .v files, that do `import os`
@@ -44,51 +46,70 @@ pub mut:
 	executable_exists     bool     // if the executable already exists, don't remove new executable after `v run`
 }
 
-pub fn new_builder(pref &pref.Preferences) Builder {
-	rdir := os.real_path(pref.path)
+pub fn new_builder(pref_ &pref.Preferences) Builder {
+	rdir := os.real_path(pref_.path)
 	compiled_dir := if os.is_dir(rdir) { rdir } else { os.dir(rdir) }
 	mut table := ast.new_table()
 	table.is_fmt = false
-	if pref.use_color == .always {
+	if pref_.use_color == .always {
 		util.emanager.set_support_color(true)
 	}
-	if pref.use_color == .never {
+	if pref_.use_color == .never {
 		util.emanager.set_support_color(false)
 	}
-	table.pointer_size = if pref.m64 { 8 } else { 4 }
-	msvc := find_msvc(pref.m64) or {
-		if pref.ccompiler == 'msvc' {
-			// verror('Cannot find MSVC on this OS')
-		}
-		MsvcResult{
-			valid: false
+	table.pointer_size = if pref_.m64 { 8 } else { 4 }
+	mut msvc := MsvcResult{}
+	$if windows {
+		msvc = find_msvc(pref_.m64) or {
+			if pref_.ccompiler == 'msvc' {
+				// verror('cannot find MSVC on this OS')
+			}
+			MsvcResult{
+				valid: false
+			}
 		}
 	}
-	util.timing_set_should_print(pref.show_timings || pref.is_verbose)
-	if pref.show_callgraph || pref.show_depgraph {
+	util.timing_set_should_print(pref_.show_timings || pref_.is_verbose)
+	if pref_.show_callgraph || pref_.show_depgraph {
 		dotgraph.start_digraph()
 	}
-	mut executable_name := pref.out_name
+	mut executable_name := pref_.out_name
 	$if windows {
 		executable_name += '.exe'
 	}
 	return Builder{
-		pref: pref
+		pref: pref_
 		table: table
-		checker: checker.new_checker(table, pref)
-		transformer: transformer.new_transformer_with_table(table, pref)
+		checker: checker.new_checker(table, pref_)
+		transformer: transformer.new_transformer_with_table(table, pref_)
 		compiled_dir: compiled_dir
 		cached_msvc: msvc
 		executable_exists: os.is_file(executable_name)
 	}
 }
 
-pub fn (mut b Builder) front_stages(v_files []string) ? {
+pub fn (mut b Builder) interpret_text(code string, v_files []string) ! {
+	b.parsed_files = parser.parse_files(v_files, mut b.table, b.pref)
+	b.parsed_files << parser.parse_text(code, '', mut b.table, .skip_comments, b.pref)
+	b.parse_imports()
+
+	if b.pref.only_check_syntax {
+		return error_with_code('stop_after_parser', 7001)
+	}
+
+	b.middle_stages()!
+}
+
+pub fn (mut b Builder) front_stages(v_files []string) ! {
 	mut timers := util.get_timers()
+	util.timing_start('ALL_FRONT_STAGES')
+	defer {
+		timers.show('ALL_FRONT_STAGES')
+	}
 	util.timing_start('PARSE')
 
 	util.timing_start('Builder.front_stages.parse_files')
-	b.parsed_files = parser.parse_files(v_files, b.table, b.pref)
+	b.parsed_files = parser.parse_files(v_files, mut b.table, b.pref)
 	timers.show('Builder.front_stages.parse_files')
 
 	b.parse_imports()
@@ -97,11 +118,11 @@ pub fn (mut b Builder) front_stages(v_files []string) ? {
 	timers.show('PARSE')
 	timers.show_if_exists('PARSE stmt')
 	if b.pref.only_check_syntax {
-		return error_with_code('stop_after_parser', 9999)
+		return error_with_code('stop_after_parser', 7001)
 	}
 }
 
-pub fn (mut b Builder) middle_stages() ? {
+pub fn (mut b Builder) middle_stages() ! {
 	util.timing_start('CHECK')
 
 	util.timing_start('Checker.generic_insts_to_concrete')
@@ -115,7 +136,7 @@ pub fn (mut b Builder) middle_stages() ? {
 		return error('too many errors/warnings/notices')
 	}
 	if b.pref.check_only {
-		return error_with_code('stop_after_checker', 9999)
+		return error_with_code('stop_after_checker', 8001)
 	}
 	util.timing_start('TRANSFORM')
 	b.transformer.transform_files(b.parsed_files)
@@ -123,16 +144,19 @@ pub fn (mut b Builder) middle_stages() ? {
 	//
 	b.table.complete_interface_check()
 	if b.pref.skip_unused {
-		markused.mark_used(mut b.table, b.pref, b.parsed_files)
+		markused.mark_used(mut b.table, mut b.pref, b.parsed_files)
 	}
 	if b.pref.show_callgraph {
 		callgraph.show(mut b.table, b.pref, b.parsed_files)
 	}
+	if b.pref.dump_defines != '' {
+		b.dump_defines()
+	}
 }
 
-pub fn (mut b Builder) front_and_middle_stages(v_files []string) ? {
-	b.front_stages(v_files)?
-	b.middle_stages()?
+pub fn (mut b Builder) front_and_middle_stages(v_files []string) ! {
+	b.front_stages(v_files)!
+	b.middle_stages()!
 }
 
 // parse all deps from already parsed files
@@ -152,7 +176,7 @@ pub fn (mut b Builder) parse_imports() {
 	// parsed (but not all of them), then this will cause a problem.
 	// we could add a list of parsed files instead, but I think
 	// there is a better solution all around, I will revisit this.
-	// NOTE: there is a very similar occurance with the way
+	// NOTE: there is a very similar occurrence with the way
 	// internal module test's work, and this was the reason there
 	// were issues with duplicate declarations, so we should sort
 	// that out in a similar way.
@@ -185,20 +209,20 @@ pub fn (mut b Builder) parse_imports() {
 			import_path := b.find_module_path(mod, ast_file.path) or {
 				// v.parsers[i].error_with_token_index('cannot import module "$mod" (not found)', v.parsers[i].import_ast.get_import_tok_idx(mod))
 				// break
-				b.parsed_files[i].errors << b.error_with_pos('cannot import module "$mod" (not found)',
+				b.parsed_files[i].errors << b.error_with_pos('cannot import module "${mod}" (not found)',
 					ast_file.path, imp.pos)
 				break
 			}
 			v_files := b.v_files_from_dir(import_path)
 			if v_files.len == 0 {
 				// v.parsers[i].error_with_token_index('cannot import module "$mod" (no .v files in "$import_path")', v.parsers[i].import_ast.get_import_tok_idx(mod))
-				b.parsed_files[i].errors << b.error_with_pos('cannot import module "$mod" (no .v files in "$import_path")',
+				b.parsed_files[i].errors << b.error_with_pos('cannot import module "${mod}" (no .v files in "${import_path}")',
 					ast_file.path, imp.pos)
 				continue
 			}
 			// eprintln('>> ast_file.path: $ast_file.path , done: $done_imports, `import $mod` => $v_files')
 			// Add all imports referenced by these libs
-			parsed_files := parser.parse_files(v_files, b.table, b.pref)
+			parsed_files := parser.parse_files(v_files, mut b.table, b.pref)
 			for file in parsed_files {
 				mut name := file.mod.name
 				if name == '' {
@@ -207,7 +231,7 @@ pub fn (mut b Builder) parse_imports() {
 				sname := name.all_after_last('.')
 				smod := mod.all_after_last('.')
 				if sname != smod {
-					msg := 'bad module definition: $ast_file.path imports module "$mod" but $file.path is defined as module `$name`'
+					msg := 'bad module definition: ${ast_file.path} imports module "${mod}" but ${file.path} is defined as module `${name}`'
 					b.parsed_files[i].errors << b.error_with_pos(msg, ast_file.path, imp.pos)
 				}
 			}
@@ -219,6 +243,15 @@ pub fn (mut b Builder) parse_imports() {
 	if b.pref.print_v_files {
 		for p in b.parsed_files {
 			println(p.path)
+		}
+		exit(0)
+	}
+	if b.pref.print_watched_files {
+		for p in b.parsed_files {
+			println(p.path)
+			for tp in p.template_paths {
+				println(tp)
+			}
 		}
 		exit(0)
 	}
@@ -283,7 +316,11 @@ pub fn (b &Builder) import_graph() &depgraph.DepGraph {
 			deps << 'builtin'
 			if b.pref.backend == .c {
 				// TODO JavaScript backend doesn't handle os for now
-				if b.pref.is_vsh && p.mod.name !in ['os', 'dl', 'strings.textscanner'] {
+				// os import libraries so we exclude anything which could cause a loop
+				// git grep import vlib/os | cut -f2 -d: | cut -f2 -d" " | sort -u
+				// dl, os, os.cmdline, os.filelock, os.notify, strings, strings.textscanner, term.termios, time
+				if b.pref.is_vsh
+					&& p.mod.name !in ['os', 'dl', 'strings.textscanner', 'term.termios'] {
 					deps << 'os'
 				}
 			}
@@ -308,13 +345,13 @@ pub fn (b Builder) v_files_from_dir(dir string) []string {
 			println('looks like you are trying to build V with an old command')
 			println('use `v -o v cmd/v` instead of `v -o v compiler`')
 		}
-		verror("$dir doesn't exist")
+		verror("${dir} doesn't exist")
 	} else if !os.is_dir(dir) {
-		verror("$dir isn't a directory!")
+		verror("${dir} isn't a directory!")
 	}
 	mut files := os.ls(dir) or { panic(err) }
 	if b.pref.is_verbose {
-		println('v_files_from_dir ("$dir")')
+		println('v_files_from_dir ("${dir}")')
 	}
 	res := b.pref.should_compile_filtered_files(dir, files)
 	if res.len == 0 {
@@ -322,7 +359,7 @@ pub fn (b Builder) v_files_from_dir(dir string) []string {
 		src_path := os.join_path(dir, 'src')
 		if os.is_dir(src_path) {
 			if b.pref.is_verbose {
-				println('v_files_from_dir ("$src_path") (/src/)')
+				println('v_files_from_dir ("${src_path}") (/src/)')
 			}
 			files = os.ls(src_path) or { panic(err) }
 			return b.pref.should_compile_filtered_files(src_path, files)
@@ -343,7 +380,7 @@ pub fn (b Builder) info(s string) {
 	}
 }
 
-[inline]
+@[inline]
 pub fn module_path(mod string) string {
 	// submodule support
 	return mod.replace('.', os.path_separator)
@@ -351,7 +388,7 @@ pub fn module_path(mod string) string {
 
 // TODO: try to merge this & util.module functions to create a
 // reliable multi use function. see comments in util/module.v
-pub fn (b &Builder) find_module_path(mod string, fpath string) ?string {
+pub fn (b &Builder) find_module_path(mod string, fpath string) !string {
 	// support @VROOT/v.mod relative paths:
 	mut mcache := vmod.get_cache()
 	vmod_file_location := mcache.get_by_file(fpath)
@@ -377,11 +414,11 @@ pub fn (b &Builder) find_module_path(mod string, fpath string) ?string {
 	for search_path in module_lookup_paths {
 		try_path := os.join_path(search_path, mod_path)
 		if b.pref.is_verbose {
-			println('  >> trying to find $mod in $try_path ..')
+			println('  >> trying to find ${mod} in ${try_path} ..')
 		}
 		if os.is_dir(try_path) {
 			if b.pref.is_verbose {
-				println('  << found $try_path .')
+				println('  << found ${try_path} .')
 			}
 			return try_path
 		}
@@ -392,14 +429,14 @@ pub fn (b &Builder) find_module_path(mod string, fpath string) ?string {
 		p1 := path_parts[0..i].join(os.path_separator)
 		try_path := os.join_path(p1, mod_path)
 		if b.pref.is_verbose {
-			println('  >> trying to find $mod in $try_path ..')
+			println('  >> trying to find ${mod} in ${try_path} ..')
 		}
 		if os.is_dir(try_path) {
 			return try_path
 		}
 	}
 	smodule_lookup_paths := module_lookup_paths.join(', ')
-	return error('module "$mod" not found in:\n$smodule_lookup_paths')
+	return error('module "${mod}" not found in:\n${smodule_lookup_paths}')
 }
 
 pub fn (b &Builder) show_total_warns_and_errors_stats() {
@@ -422,9 +459,21 @@ pub fn (b &Builder) show_total_warns_and_errors_stats() {
 		nstring := util.bold(nr_notices.str())
 
 		if b.pref.check_only {
-			println('summary: $estring V errors, $wstring V warnings, $nstring V notices')
+			println('summary: ${estring} V errors, ${wstring} V warnings, ${nstring} V notices')
 		} else {
-			println('checker summary: $estring V errors, $wstring V warnings, $nstring V notices')
+			println('checker summary: ${estring} V errors, ${wstring} V warnings, ${nstring} V notices')
+		}
+	}
+	if b.checker.nr_errors > 0 && b.pref.path.ends_with('.v') && os.is_file(b.pref.path) {
+		for err in b.checker.errors {
+			if err.message.starts_with('unknown ') {
+				// Sometimes users try to `v main.v`, when they have several .v files in their project.
+				// Then, they encounter puzzling errors about missing or unknown types. In this case,
+				// the intended command may have been `v .` instead, so just suggest that:
+				old_cmd := util.bold('v ${b.pref.path}')
+				new_cmd := util.bold('v ${os.dir(b.pref.path)}')
+				eprintln(util.color('notice', 'If the code of your project is in multiple files, try with `${new_cmd}` instead of `${old_cmd}`'))
+			}
 		}
 	}
 }
@@ -448,19 +497,15 @@ pub fn (mut b Builder) print_warnings_and_errors() {
 	}
 
 	if b.pref.check_only {
-		for file in b.parsed_files {
-			if !b.pref.skip_warnings {
+		if !b.pref.skip_notes {
+			for file in b.parsed_files {
 				for err in file.notices {
 					kind := if b.pref.is_verbose {
-						'$err.reporter notice #$b.nr_notices:'
+						'${err.reporter} notice #${b.nr_notices}:'
 					} else {
 						'notice:'
 					}
-					ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-					eprintln(ferror)
-					if err.details.len > 0 {
-						eprintln('Details: $err.details')
-					}
+					util.show_compiler_message(kind, err.CompilerMessage)
 				}
 			}
 		}
@@ -468,31 +513,23 @@ pub fn (mut b Builder) print_warnings_and_errors() {
 		for file in b.parsed_files {
 			for err in file.errors {
 				kind := if b.pref.is_verbose {
-					'$err.reporter error #$b.nr_errors:'
+					'${err.reporter} error #${b.nr_errors}:'
 				} else {
 					'error:'
 				}
-				ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-				eprintln(ferror)
-				if err.details.len > 0 {
-					eprintln('Details: $err.details')
-				}
+				util.show_compiler_message(kind, err.CompilerMessage)
 			}
 		}
 
-		for file in b.parsed_files {
-			if !b.pref.skip_warnings {
+		if !b.pref.skip_warnings {
+			for file in b.parsed_files {
 				for err in file.warnings {
 					kind := if b.pref.is_verbose {
-						'$err.reporter warning #$b.nr_warnings:'
+						'${err.reporter} warning #${b.nr_warnings}:'
 					} else {
 						'warning:'
 					}
-					ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-					eprintln(ferror)
-					if err.details.len > 0 {
-						eprintln('Details: $err.details')
-					}
+					util.show_compiler_message(kind, err.CompilerMessage)
 				}
 			}
 		}
@@ -505,55 +542,43 @@ pub fn (mut b Builder) print_warnings_and_errors() {
 	}
 
 	if b.pref.is_verbose && b.checker.nr_warnings > 1 {
-		println('$b.checker.nr_warnings warnings')
+		println('${b.checker.nr_warnings} warnings')
 	}
 	if b.pref.is_verbose && b.checker.nr_notices > 1 {
-		println('$b.checker.nr_notices notices')
+		println('${b.checker.nr_notices} notices')
 	}
-	if b.checker.nr_notices > 0 && !b.pref.skip_warnings {
+	if b.checker.nr_notices > 0 && !b.pref.skip_notes {
 		for err in b.checker.notices {
 			kind := if b.pref.is_verbose {
-				'$err.reporter notice #$b.checker.nr_notices:'
+				'${err.reporter} notice #${b.checker.nr_notices}:'
 			} else {
 				'notice:'
 			}
-			ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-			eprintln(ferror)
-			if err.details.len > 0 {
-				eprintln('Details: $err.details')
-			}
+			util.show_compiler_message(kind, err.CompilerMessage)
 		}
 	}
 	if b.checker.nr_warnings > 0 && !b.pref.skip_warnings {
 		for err in b.checker.warnings {
 			kind := if b.pref.is_verbose {
-				'$err.reporter warning #$b.checker.nr_warnings:'
+				'${err.reporter} warning #${b.checker.nr_warnings}:'
 			} else {
 				'warning:'
 			}
-			ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-			eprintln(ferror)
-			if err.details.len > 0 {
-				eprintln('Details: $err.details')
-			}
+			util.show_compiler_message(kind, err.CompilerMessage)
 		}
 	}
 	//
 	if b.pref.is_verbose && b.checker.nr_errors > 1 {
-		println('$b.checker.nr_errors errors')
+		println('${b.checker.nr_errors} errors')
 	}
 	if b.checker.nr_errors > 0 {
 		for err in b.checker.errors {
 			kind := if b.pref.is_verbose {
-				'$err.reporter error #$b.checker.nr_errors:'
+				'${err.reporter} error #${b.checker.nr_errors}:'
 			} else {
 				'error:'
 			}
-			ferror := util.formatted_error(kind, err.message, err.file_path, err.pos)
-			eprintln(ferror)
-			if err.details.len > 0 {
-				eprintln('Details: $err.details')
-			}
+			util.show_compiler_message(kind, err.CompilerMessage)
 		}
 		b.show_total_warns_and_errors_stats()
 		exit(1)
@@ -568,7 +593,7 @@ pub fn (mut b Builder) print_warnings_and_errors() {
 				for stmt in file.stmts {
 					if stmt is ast.FnDecl {
 						if stmt.name == fn_name {
-							fheader := stmt.stringify(b.table, 'main', map[string]string{})
+							fheader := b.table.stringify_fn_decl(&stmt, 'main', map[string]string{})
 							redefines << FunctionRedefinition{
 								fpath: file.path
 								fline: stmt.pos.line_nr
@@ -581,12 +606,15 @@ pub fn (mut b Builder) print_warnings_and_errors() {
 				}
 			}
 			if redefines.len > 0 {
-				ferror := util.formatted_error('builder error:', 'redefinition of function `$fn_name`',
-					'', token.Pos{})
-				eprintln(ferror)
+				util.show_compiler_message('builder error:',
+					message: 'redefinition of function `${fn_name}`'
+				)
 				for redefine in redefines {
-					eprintln(util.formatted_error('conflicting declaration:', redefine.fheader,
-						redefine.fpath, redefine.f.pos))
+					util.show_compiler_message('conflicting declaration:',
+						message: redefine.fheader
+						file_path: redefine.fpath
+						pos: redefine.f.pos
+					)
 				}
 				total_conflicts++
 			}
@@ -607,8 +635,7 @@ struct FunctionRedefinition {
 
 pub fn (b &Builder) error_with_pos(s string, fpath string, pos token.Pos) errors.Error {
 	if !b.pref.check_only {
-		ferror := util.formatted_error('builder error:', s, fpath, pos)
-		eprintln(ferror)
+		util.show_compiler_message('builder error:', pos: pos, file_path: fpath, message: s)
 		exit(1)
 	}
 
@@ -620,7 +647,7 @@ pub fn (b &Builder) error_with_pos(s string, fpath string, pos token.Pos) errors
 	}
 }
 
-[noreturn]
+@[noreturn]
 pub fn verror(s string) {
 	util.verror('builder error', s)
 }

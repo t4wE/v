@@ -61,7 +61,7 @@ fn (mut bmp BitMap) format_texture() {
 	b_b := u8((bmp.bg_color >> 8) & 0xFF)
 	b_a := u8(bmp.bg_color & 0xFF)
 
-	// trasform buffer in a texture
+	// transform buffer in a texture
 	x := bmp.buf
 	unsafe {
 		mut i := 0
@@ -72,7 +72,7 @@ fn (mut bmp BitMap) format_texture() {
 				x[i + 1] = g
 				x[i + 2] = b
 				// alpha
-				x[i + 3] = u8(u16(a * data) >> 8)
+				x[i + 3] = u8(u16(u16(a) * data) >> 8)
 			} else {
 				x[i + 0] = b_r
 				x[i + 1] = b_g
@@ -88,14 +88,14 @@ fn (mut bmp BitMap) format_texture() {
 pub fn (mut bmp BitMap) save_as_ppm(file_name string) {
 	tmp_buf := bmp.buf
 	mut buf := unsafe { malloc_noscan(bmp.buf_size) }
-	unsafe { C.memcpy(buf, tmp_buf, bmp.buf_size) }
+	unsafe { vmemcpy(buf, tmp_buf, bmp.buf_size) }
 	bmp.buf = buf
 
 	bmp.format_texture()
 	npixels := bmp.width * bmp.height
 	mut f_out := os.create(file_name) or { panic(err) }
 	f_out.writeln('P3') or { panic(err) }
-	f_out.writeln('$bmp.width $bmp.height') or { panic(err) }
+	f_out.writeln('${bmp.width} ${bmp.height}') or { panic(err) }
 	f_out.writeln('255') or { panic(err) }
 	for i in 0 .. npixels {
 		pos := i * bmp.bp
@@ -103,7 +103,7 @@ pub fn (mut bmp BitMap) save_as_ppm(file_name string) {
 			c_r := bmp.buf[pos]
 			c_g := bmp.buf[pos + 1]
 			c_b := bmp.buf[pos + 2]
-			f_out.write_string('$c_r $c_g $c_b ') or { panic(err) }
+			f_out.write_string('${c_r} ${c_g} ${c_b} ') or { panic(err) }
 		}
 	}
 	f_out.close()
@@ -134,23 +134,23 @@ pub fn (mut bmp BitMap) save_raw_data(file_name string) {
 // Math functions
 //
 // integer part of x
-[inline]
+@[inline]
 fn ipart(x f32) f32 {
 	return f32(math.floor(x))
 }
 
-[inline]
+@[inline]
 fn round(x f32) f32 {
 	return ipart(x + 0.5)
 }
 
 // fractional part of x
-[inline]
+@[inline]
 fn fpart(x f32) f32 {
 	return x - f32(math.floor(x))
 }
 
-[inline]
+@[inline]
 fn rfpart(x f32) f32 {
 	return 1 - fpart(x)
 }
@@ -161,7 +161,7 @@ fn rfpart(x f32) f32 {
 *
 ******************************************************************************/
 /*
-[inline]
+@[inline]
 pub fn (mut dev BitMap) get_color(x int, y int) (int, int, int, int){
 	if x < 0 || x >= dev.width || y < 0 || y >= dev.height {
 		return 0,0,0,0
@@ -172,7 +172,7 @@ pub fn (mut dev BitMap) get_color(x int, y int) (int, int, int, int){
 	}
 }
 
-[inline]
+@[inline]
 pub fn (mut dev BitMap) get_color_u32(x int, y int) u32{
 	r, g, b, a := dev.get_color(x, y)
 	unsafe{
@@ -185,12 +185,12 @@ pub fn (mut dev BitMap) get_color_u32(x int, y int) u32{
 * Drawing
 *
 ******************************************************************************/
-[inline]
+@[inline]
 pub fn color_multiply_alpha(c u32, level f32) u32 {
 	return u32(f32(c & 0xFF) * level)
 }
 
-[inline]
+@[inline]
 pub fn color_multiply(c u32, level f32) u32 {
 	mut r := (f32((c >> 24) & 0xFF) / 255.0) * level
 	mut g := (f32((c >> 16) & 0xFF) / 255.0) * level

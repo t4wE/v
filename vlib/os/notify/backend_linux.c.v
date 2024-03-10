@@ -3,14 +3,14 @@ module notify
 import time
 import os
 
-#include <sys/epoll.h>
+#insert "@VEXEROOT/vlib/os/notify/epoll.h"
 
-struct C.epoll_event {
+pub struct C.epoll_event {
 	events u32
 	data   C.epoll_data_t
 }
 
-[typedef]
+@[typedef]
 union C.epoll_data_t {
 	ptr voidptr
 	fd  int
@@ -26,14 +26,12 @@ fn C.epoll_wait(int, &C.epoll_event, int, int) int
 
 // EpollNotifier provides methods that implement FdNotifier using the
 // epoll I/O event notification facility (linux only)
-[noinit]
 struct EpollNotifier {
 	epoll_fd int
 }
 
 // EpollEvent describes an event that occurred for a file descriptor in
 // the watch list
-[noinit]
 struct EpollEvent {
 pub:
 	fd   int
@@ -43,7 +41,7 @@ pub:
 // new creates a new EpollNotifier
 // The FdNotifier interface is returned to allow OS specific
 // implementations without exposing the concrete type
-pub fn new() ?FdNotifier {
+pub fn new() !FdNotifier {
 	fd := C.epoll_create1(0) // 0 indicates default behavior
 	if fd == -1 {
 		return error(os.posix_get_error_msg(C.errno))
@@ -55,21 +53,19 @@ pub fn new() ?FdNotifier {
 	return x
 }
 
-const (
-	epoll_read         = u32(C.EPOLLIN)
-	epoll_write        = u32(C.EPOLLOUT)
-	epoll_peer_hangup  = u32(C.EPOLLRDHUP)
-	epoll_exception    = u32(C.EPOLLPRI)
-	epoll_error        = u32(C.EPOLLERR)
-	epoll_hangup       = u32(C.EPOLLHUP)
-	epoll_edge_trigger = u32(C.EPOLLET)
-	epoll_one_shot     = u32(C.EPOLLONESHOT)
-	epoll_wake_up      = u32(C.EPOLLWAKEUP)
-	epoll_exclusive    = u32(C.EPOLLEXCLUSIVE)
-)
+const epoll_read = u32(C.EPOLLIN)
+const epoll_write = u32(C.EPOLLOUT)
+const epoll_peer_hangup = u32(C.EPOLLRDHUP)
+const epoll_exception = u32(C.EPOLLPRI)
+const epoll_error = u32(C.EPOLLERR)
+const epoll_hangup = u32(C.EPOLLHUP)
+const epoll_edge_trigger = u32(C.EPOLLET)
+const epoll_one_shot = u32(C.EPOLLONESHOT)
+const epoll_wake_up = u32(C.EPOLLWAKEUP)
+const epoll_exclusive = u32(C.EPOLLEXCLUSIVE)
 
 // ctl is a helper method for add, modify, and remove
-fn (mut en EpollNotifier) ctl(fd int, op int, mask u32) ? {
+fn (mut en EpollNotifier) ctl(fd int, op int, mask u32) ! {
 	event := C.epoll_event{
 		events: mask
 		data: C.epoll_data_t{
@@ -82,20 +78,20 @@ fn (mut en EpollNotifier) ctl(fd int, op int, mask u32) ? {
 }
 
 // add adds a file descriptor to the watch list
-fn (mut en EpollNotifier) add(fd int, events FdEventType, conf ...FdConfigFlags) ? {
+fn (mut en EpollNotifier) add(fd int, events FdEventType, conf ...FdConfigFlags) ! {
 	mask := flags_to_mask(events, ...conf)
-	en.ctl(fd, C.EPOLL_CTL_ADD, mask)?
+	en.ctl(fd, C.EPOLL_CTL_ADD, mask)!
 }
 
 // modify sets an existing entry in the watch list to the provided events and configuration
-fn (mut en EpollNotifier) modify(fd int, events FdEventType, conf ...FdConfigFlags) ? {
+fn (mut en EpollNotifier) modify(fd int, events FdEventType, conf ...FdConfigFlags) ! {
 	mask := flags_to_mask(events, ...conf)
-	en.ctl(fd, C.EPOLL_CTL_MOD, mask)?
+	en.ctl(fd, C.EPOLL_CTL_MOD, mask)!
 }
 
 // remove removes a file descriptor from the watch list
-fn (mut en EpollNotifier) remove(fd int) ? {
-	en.ctl(fd, C.EPOLL_CTL_DEL, 0)?
+fn (mut en EpollNotifier) remove(fd int) ! {
+	en.ctl(fd, C.EPOLL_CTL_DEL, 0)!
 }
 
 // wait waits to be notified of events on the watch list,
@@ -133,7 +129,7 @@ fn (mut en EpollNotifier) wait(timeout time.Duration) []FdEvent {
 
 // close closes the EpollNotifier,
 // any successive calls to add, modify, remove, and wait should fail
-fn (mut en EpollNotifier) close() ? {
+fn (mut en EpollNotifier) close() ! {
 	if C.close(en.epoll_fd) == -1 {
 		return error(os.posix_get_error_msg(C.errno))
 	}
@@ -142,7 +138,7 @@ fn (mut en EpollNotifier) close() ? {
 // event_mask_to_flag is a helper function that converts a bitmask
 // returned by epoll_wait to FdEventType
 fn event_mask_to_flag(mask u32) FdEventType {
-	mut flags := FdEventType{}
+	mut flags := unsafe { FdEventType(0) }
 
 	if mask & notify.epoll_read != 0 {
 		flags.set(.read)

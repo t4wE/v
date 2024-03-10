@@ -12,14 +12,14 @@ fn main() {
 	}
 	// html.parse() parses and returns the DOM from the given text.
 	mut doc := html.parse(resp.body)
-	// html.DocumentObjectModel.get_tag_by_attribute_value() retrieves all the tags in the document that has the given attribute name and value.
-	tags := doc.get_tag_by_attribute_value('class', 'list_article_item')
+	// html.DocumentObjectModel.get_tags_by_attribute_value() retrieves all tags in the document that have the given attribute name and value.
+	tags := doc.get_tags_by_attribute_value('class', 'list_article_item')
 	for tag in tags {
 		el := tag.children[1].children[0].children[0].children[0]
 		href := el.attributes['href'] or { panic('key not found') }
 		title := el.attributes['title'] or { panic('key not found') }
-		println('href: $href')
-		println('title: $title')
+		println('href: ${href}')
+		println('title: ${title}')
 		println('')
 	}
 }

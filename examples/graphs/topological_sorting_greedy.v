@@ -11,9 +11,9 @@ fn topog_sort_greedy(graph map[string][]string) []string {
 	mut top_order := []string{} // a vector with sequence of nodes visited
 	mut count := 0
 	/*
-	IDEA ( a greedy algorythm ):
+	IDEA ( a greedy algorithm ):
 
-	 1. choose allways the node with smallest input degree
+	 1. choose always the node with smallest input degree
 	 2. visit it
 	 3. put it in the output vector
 	 4. remove it from graph
@@ -25,7 +25,7 @@ fn topog_sort_greedy(graph map[string][]string) []string {
 	 Maybe it seems the Kahn's algorithm
 	*/
 	mut v_degree := in_degree(graph) // return: map [string] int
-	print('V Degree $v_degree')
+	print('V Degree ${v_degree}')
 	mut small_degree := min_degree(v_degree)
 	mut new_graph := remove_node_from_graph(small_degree, graph)
 	top_order << small_degree
@@ -33,7 +33,7 @@ fn topog_sort_greedy(graph map[string][]string) []string {
 
 	for (count < n_nodes) {
 		v_degree = in_degree(new_graph) // return: map [string] int
-		print('\nV Degree $v_degree')
+		print('\nV Degree ${v_degree}')
 		small_degree = min_degree(v_degree)
 		new_graph = remove_node_from_graph(small_degree, new_graph)
 
@@ -94,7 +94,7 @@ fn remove_node_from_graph(node string, a_map map[string][]string) map[string][]s
 	mut all_nodes := new_graph.keys() // get all nodes of this graph
 	// FOR THE FUTURE with filter
 	// for i in all_nodes {
-	//	   new_graph[i] = new_graph[i].filter(index(it) != node)	
+	//	   new_graph[i] = new_graph[i].filter(index(it) != node)
 	// }
 	// A HELP FROM V discussion	 GITHUB - thread
 	for key in all_nodes {

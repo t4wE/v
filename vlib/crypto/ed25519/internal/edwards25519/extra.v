@@ -33,7 +33,7 @@ fn (mut s Scalar) pow2k(k int) {
 // If the coordinates are invalid or don't represent a valid point on the curve,
 // set_extended_coordinates returns an error and the receiver is
 // unchanged. Otherwise, set_extended_coordinates returns v.
-fn (mut v Point) set_extended_coordinates(x Element, y Element, z Element, t Element) ?Point {
+fn (mut v Point) set_extended_coordinates(x Element, y Element, z Element, t Element) !Point {
 	if !is_on_curve(x, y, z, t) {
 		return error('edwards25519: invalid point coordinates')
 	}
@@ -326,7 +326,7 @@ pub fn (mut v Point) vartime_multiscalar_mult(scalars []Scalar, points []Point) 
 	// at each iteration and checking whether there is a nonzero
 	// coefficient to look up a multiple of.
 	//
-	// Skip trying to find the first nonzero coefficent, because
+	// Skip trying to find the first nonzero coefficient, because
 	// searching might be more work than a few extra doublings.
 	// k == i, l == j
 	for k := 255; k >= 0; k-- {

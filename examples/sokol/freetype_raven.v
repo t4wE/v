@@ -6,8 +6,7 @@ import fontstash
 import sokol.sfons
 import os
 
-const (
-	text = '
+const text = '
 Once upon a midnight dreary, while I pondered, weak and weary,
 Over many a quaint and curious volume of forgotten lore—
     While I nodded, nearly napping, suddenly there came a tapping,
@@ -50,22 +49,21 @@ Soon again I heard a tapping somewhat louder than before.
 Let my heart be still a moment and this mystery explore;—
             ’Tis the wind and nothing more!”
 '
-	lines = text.split('\n')
-)
+
+const lines = text.split('\n')
 
 struct AppState {
 mut:
 	pass_action gfx.PassAction
-	fons        &fontstash.Context
+	fons        &fontstash.Context = unsafe { nil }
 	font_normal int
 	inited      bool
 }
 
-[console]
 fn main() {
 	mut color_action := gfx.ColorAttachmentAction{
-		action: .clear
-		value: gfx.Color{
+		load_action: .clear
+		clear_value: gfx.Color{
 			r: 1.0
 			g: 1.0
 			b: 1.0
@@ -92,8 +90,7 @@ fn main() {
 	sapp.run(&desc)
 }
 
-fn init(user_data voidptr) {
-	mut state := &AppState(user_data)
+fn init(mut state AppState) {
 	desc := sapp.create_desc()
 	gfx.setup(&desc)
 	s := &sgl.Desc{}
@@ -103,23 +100,21 @@ fn init(user_data voidptr) {
 	if bytes := os.read_bytes(os.resource_abs_path(os.join_path('..', 'assets', 'fonts',
 		'RobotoMono-Regular.ttf')))
 	{
-		println('loaded font: $bytes.len')
+		println('loaded font: ${bytes.len}')
 		state.font_normal = state.fons.add_font_mem('sans', bytes, false)
 	}
 }
 
-fn frame(user_data voidptr) {
-	mut state := &AppState(user_data)
+fn frame(mut state AppState) {
 	state.render_font()
-	gfx.begin_default_pass(&state.pass_action, sapp.width(), sapp.height())
+	pass := sapp.create_default_pass(state.pass_action)
+	gfx.begin_pass(&pass)
 	sgl.draw()
 	gfx.end_pass()
 	gfx.commit()
 }
 
-const (
-	black = sfons.rgba(0, 0, 0, 255)
-)
+const black = sfons.rgba(0, 0, 0, 255)
 
 fn (mut state AppState) render_font() {
 	lh := 30

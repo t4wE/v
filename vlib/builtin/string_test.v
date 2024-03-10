@@ -1,6 +1,4 @@
-import strings
-
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 
@@ -144,16 +142,16 @@ fn test_ranges() {
 	assert s6 == 'first'
 }
 
-fn ranges_propagate_first(s string) ?string {
-	return s[10..]?
+fn ranges_propagate_first(s string) !string {
+	return s[10..]!
 }
 
-fn ranges_propagate_last(s string) ?string {
-	return s[..20]?
+fn ranges_propagate_last(s string) !string {
+	return s[..20]!
 }
 
-fn ranges_propagate_both(s string) ?string {
-	return s[1..20]?
+fn ranges_propagate_both(s string) !string {
+	return s[1..20]!
 }
 
 fn test_split_nth() {
@@ -172,7 +170,6 @@ fn test_split_nth() {
 	assert b.split_nth('::', 2).len == 2
 	assert b.split_nth('::', 10).len == 3
 	c := 'ABCDEF'
-	println(c.split('').len)
 	assert c.split('').len == 6
 	assert c.split_nth('', 3).len == 3
 	assert c.split_nth('BC', -1).len == 2
@@ -186,6 +183,46 @@ fn test_split_nth() {
 	assert e.split_nth(',,', 3).len == 3
 	assert e.split_nth(',', -1).len == 12
 	assert e.split_nth(',', 3).len == 3
+	f := '1:2:3'
+	assert f.split_nth(':', 2) == ['1', '2:3']
+	assert f.rsplit_nth(':', 2) == ['3', '1:2']
+	g := '123'
+	assert g.split_nth('', 2) == ['1', '23']
+	assert g.rsplit_nth('', 2) == ['3', '12']
+	h := ''
+	assert h.split_nth('', 2) == []
+	assert h.rsplit_nth('', 2) == []
+}
+
+fn test_rsplit_nth() {
+	a := '1,2,3'
+	assert a.rsplit(',').len == 3
+	assert a.rsplit_nth(',', -1).len == 3
+	assert a.rsplit_nth(',', 0).len == 3
+	assert a.rsplit_nth(',', 1).len == 1
+	assert a.rsplit_nth(',', 2).len == 2
+	assert a.rsplit_nth(',', 10).len == 3
+	b := '1::2::3'
+	assert b.rsplit('::').len == 3
+	assert b.rsplit_nth('::', -1).len == 3
+	assert b.rsplit_nth('::', 0).len == 3
+	assert b.rsplit_nth('::', 1).len == 1
+	assert b.rsplit_nth('::', 2).len == 2
+	assert b.rsplit_nth('::', 10).len == 3
+	c := 'ABCDEF'
+	assert c.rsplit('').len == 6
+	assert c.rsplit_nth('', 3).len == 3
+	assert c.rsplit_nth('BC', -1).len == 2
+	d := ','
+	assert d.rsplit(',').len == 2
+	assert d.rsplit_nth('', 3).len == 1
+	assert d.rsplit_nth(',', -1).len == 2
+	assert d.rsplit_nth(',', 3).len == 2
+	e := ',,,0,,,,,a,,b,'
+	assert e.rsplit(',,').len == 5
+	assert e.rsplit_nth(',,', 3).len == 3
+	assert e.rsplit_nth(',', -1).len == 12
+	assert e.rsplit_nth(',', 3).len == 3
 }
 
 fn test_split_nth_values() {
@@ -217,6 +254,37 @@ fn test_split_nth_values() {
 	assert a4[0] == 'CMD'
 	assert a4[1] == 'eprintln(phase'
 	assert a4[2] == '1)'
+}
+
+fn test_rsplit_nth_values() {
+	line := 'CMD=eprintln(phase=1)'
+
+	a0 := line.rsplit_nth('=', 0)
+	assert a0.len == 3
+	assert a0[0] == '1)'
+	assert a0[1] == 'eprintln(phase'
+	assert a0[2] == 'CMD'
+
+	a1 := line.rsplit_nth('=', 1)
+	assert a1.len == 1
+	assert a1[0] == 'CMD=eprintln(phase=1)'
+
+	a2 := line.rsplit_nth('=', 2)
+	assert a2.len == 2
+	assert a2[0] == '1)'
+	assert a2[1] == 'CMD=eprintln(phase'
+
+	a3 := line.rsplit_nth('=', 3)
+	assert a3.len == 3
+	assert a0[0] == '1)'
+	assert a0[1] == 'eprintln(phase'
+	assert a0[2] == 'CMD'
+
+	a4 := line.rsplit_nth('=', 4)
+	assert a4.len == 3
+	assert a0[0] == '1)'
+	assert a0[1] == 'eprintln(phase'
+	assert a0[2] == 'CMD'
 }
 
 fn test_split() {
@@ -265,6 +333,52 @@ fn test_split() {
 	assert vals[1] == ''
 }
 
+fn test_rsplit() {
+	mut s := 'volt/twitch.v:34'
+	mut vals := s.rsplit(':')
+	assert vals.len == 2
+	assert vals[0] == '34'
+	assert vals[1] == 'volt/twitch.v'
+	// /////////
+	s = '2018-01-01z13:01:02'
+	vals = s.rsplit('z')
+	assert vals.len == 2
+	assert vals[0] == '13:01:02'
+	assert vals[1] == '2018-01-01'
+	// //////////
+	s = '4627a862c3dec29fb3182a06b8965e0025759e18___1530207969___blue'
+	vals = s.rsplit('___')
+	assert vals.len == 3
+	assert vals[0] == 'blue'
+	assert vals[1] == '1530207969'
+	assert vals[2] == '4627a862c3dec29fb3182a06b8965e0025759e18'
+	// /////////
+	s = 'lalala'
+	vals = s.rsplit('a')
+	assert vals.len == 4
+	assert vals[0] == ''
+	assert vals[1] == 'l'
+	assert vals[2] == 'l'
+	assert vals[3] == 'l'
+	// /////////
+	s = 'awesome'
+	a := s.rsplit('')
+	assert a.len == 7
+	assert a[0] == 'e'
+	assert a[1] == 'm'
+	assert a[2] == 'o'
+	assert a[3] == 's'
+	assert a[4] == 'e'
+	assert a[5] == 'w'
+	assert a[6] == 'a'
+	// /////////
+	s = 'wavy turquoise bags'
+	vals = s.rsplit('wavy ')
+	assert vals.len == 2
+	assert vals[0] == 'turquoise bags'
+	assert vals[1] == ''
+}
+
 fn test_split_any() {
 	assert 'ABC'.split_any('') == ['A', 'B', 'C']
 	assert ''.split_any(' ') == []
@@ -274,6 +388,207 @@ fn test_split_any() {
 	assert 'Ciao+come*stai? '.split_any('+*') == ['Ciao', 'come', 'stai? ']
 	assert 'Ciao+come*stai? '.split_any('+* ') == ['Ciao', 'come', 'stai?']
 	assert 'first row\nsecond row'.split_any(' \n') == ['first', 'row', 'second', 'row']
+}
+
+fn test_rsplit_any() {
+	assert 'ABC'.rsplit_any('') == ['C', 'B', 'A']
+	assert ''.rsplit_any(' ') == []
+	assert ' '.rsplit_any(' ') == ['']
+	assert '  '.rsplit_any(' ') == ['', '']
+	assert ' Ciao come stai?'.rsplit_any(' ') == ['stai?', 'come', 'Ciao']
+	assert ' Ciao+come*stai?'.rsplit_any('+*') == ['stai?', 'come', ' Ciao']
+	assert ' Ciao+come*stai?'.rsplit_any('+* ') == ['stai?', 'come', 'Ciao']
+	assert 'first row\nsecond row'.rsplit_any(' \n') == ['row', 'second', 'row', 'first']
+}
+
+fn test_split_once() ? {
+	path1, ext1 := 'home/dir/lang.zip'.split_once('.')?
+	assert path1 == 'home/dir/lang'
+	assert ext1 == 'zip'
+	path2, ext2 := 'home/dir/lang.ts.dts'.split_once('.')?
+	assert path2 == 'home/dir/lang'
+	assert ext2 == 'ts.dts'
+	path3, ext3 := 'home/dir'.split_once('.') or { '', '' }
+	assert path3 == ''
+	assert ext3 == ''
+}
+
+fn test_rsplit_once() ? {
+	path1, ext1 := 'home/dir/lang.zip'.rsplit_once('.')?
+	assert path1 == 'home/dir/lang'
+	assert ext1 == 'zip'
+	path2, ext2 := 'home/dir/lang.ts.dts'.rsplit_once('.')?
+	assert path2 == 'home/dir/lang.ts'
+	assert ext2 == 'dts'
+	path3, ext3 := 'home/dir'.rsplit_once('.') or { '', '' }
+	assert path3 == ''
+	assert ext3 == ''
+}
+
+fn test_is_bin() {
+	assert ''.is_bin() == false
+	assert '0b1'.is_bin() == true
+	assert '0b0'.is_bin() == true
+	assert '0b'.is_bin() == false
+	assert '-0b'.is_bin() == false
+	assert '-0b1'.is_bin() == true
+	assert '-0b0'.is_bin() == true
+	assert '-0b1101'.is_bin() == true
+	assert '-0b0101'.is_bin() == true
+	assert '-324'.is_bin() == false
+	assert '-0'.is_bin() == false
+	assert '0x1'.is_bin() == false
+	assert '0x1A'.is_bin() == false
+	assert '+0b1101'.is_bin() == true
+	assert '+0b1'.is_bin() == true
+	assert '-0x1'.is_bin() == false
+	assert '-0x1A'.is_bin() == false
+	assert '0x'.is_bin() == false
+	assert '0'.is_bin() == false
+	assert '0xFF'.is_bin() == false
+	assert '0xG'.is_bin() == false
+	assert '-'.is_bin() == false
+	assert '+'.is_bin() == false
+	assert '-0xFF'.is_bin() == false
+	assert '0.34'.is_bin() == false
+	assert '0o23'.is_bin() == false
+	assert 'vlang'.is_bin() == false
+}
+
+fn test_is_oct() {
+	assert ''.is_oct() == false
+	assert '0o0'.is_oct() == true
+	assert '0o1'.is_oct() == true
+	assert '0o2'.is_oct() == true
+	assert '-0o0'.is_oct() == true
+	assert '-0o1'.is_oct() == true
+	assert '-0o2'.is_oct() == true
+
+	assert '0o04'.is_oct() == true
+	assert '0o16'.is_oct() == true
+	assert '0o23'.is_oct() == true
+	assert '-0o05'.is_oct() == true
+	assert '-0o13'.is_oct() == true
+	assert '-0o22'.is_oct() == true
+
+	assert '0o8'.is_oct() == false
+	assert '0o9'.is_oct() == false
+	assert '-0o8'.is_oct() == false
+	assert '-0o9'.is_oct() == false
+	assert '0o84'.is_oct() == false
+	assert '0o96'.is_oct() == false
+	assert '-0o83'.is_oct() == false
+	assert '-0o2923'.is_oct() == false
+	assert '0b1'.is_oct() == false
+	assert '0b0'.is_oct() == false
+	assert '0b'.is_oct() == false
+	assert '-0b'.is_oct() == false
+	assert '-0b1'.is_oct() == false
+	assert '-0b0'.is_oct() == false
+	assert '-0b1101'.is_oct() == false
+	assert '+0o234'.is_oct() == true
+	assert '+0o432'.is_oct() == true
+	assert '-'.is_oct() == false
+	assert '+'.is_oct() == false
+	assert '-0b0101'.is_oct() == false
+	assert '-324'.is_oct() == false
+	assert '-0'.is_oct() == false
+	assert '0x1'.is_oct() == false
+	assert '0x1A'.is_oct() == false
+	assert '-0x1'.is_oct() == false
+	assert '-0x1A'.is_oct() == false
+	assert '0x'.is_oct() == false
+	assert '0'.is_oct() == false
+	assert '0xFF'.is_oct() == false
+	assert '0xG'.is_oct() == false
+	assert '-0xFF'.is_oct() == false
+	assert '0.34'.is_oct() == false
+	assert 'vlang'.is_oct() == false
+}
+
+fn test_is_hex() {
+	assert ''.is_hex() == false
+	assert '-324'.is_hex() == false
+	assert '-0'.is_hex() == false
+	assert '0x1'.is_hex() == true
+	assert '0x1A'.is_hex() == true
+	assert '-0x1'.is_hex() == true
+	assert '-0x1A'.is_hex() == true
+	assert '+0x1'.is_hex() == true
+	assert '+0x1A'.is_hex() == true
+	assert '0x'.is_hex() == false
+	assert '0'.is_hex() == false
+	assert '-'.is_hex() == false
+	assert '+'.is_hex() == false
+	assert '0xFF'.is_hex() == true
+	assert '0xG'.is_hex() == false
+	assert '-0xFF'.is_hex() == true
+	assert '0b1101'.is_hex() == false
+	assert '0.34'.is_hex() == false
+	assert '0o23'.is_hex() == false
+	assert 'vlang'.is_hex() == false
+}
+
+fn test_is_int() {
+	assert ''.is_int() == false
+	assert '-324'.is_int() == true
+	assert '234'.is_int() == true
+	assert '-0'.is_int() == true
+	assert '-b'.is_int() == false
+	assert '-123456789'.is_int() == true
+	assert '123456789'.is_int() == true
+	assert '0x1'.is_int() == false
+	assert '0b1101'.is_int() == false
+	assert '0.34'.is_int() == false
+	assert '0o23'.is_int() == false
+	assert 'vlang'.is_int() == false
+
+	assert '0o0'.is_int() == false
+	assert '0o1'.is_int() == false
+	assert '0o2'.is_int() == false
+	assert '-0o0'.is_int() == false
+	assert '-0o1'.is_int() == false
+	assert '-0o2'.is_int() == false
+
+	assert '0o04'.is_int() == false
+	assert '0o16'.is_int() == false
+	assert '0o23'.is_int() == false
+	assert '-0o05'.is_int() == false
+	assert '-0o13'.is_int() == false
+	assert '-0o22'.is_int() == false
+
+	assert '0o8'.is_int() == false
+	assert '0o9'.is_int() == false
+	assert '-0o8'.is_int() == false
+	assert '-0o9'.is_int() == false
+	assert '0o84'.is_int() == false
+	assert '0o96'.is_int() == false
+	assert '-0o83'.is_int() == false
+	assert '-0o2923'.is_int() == false
+	assert '0b1'.is_int() == false
+	assert '0b0'.is_int() == false
+	assert '0b'.is_int() == false
+	assert '-0b'.is_int() == false
+	assert '-0b1'.is_int() == false
+	assert '-0b0'.is_int() == false
+	assert '-0b1101'.is_int() == false
+	assert '-0b0101'.is_int() == false
+	assert '-324'.is_int() == true
+	assert '-0'.is_int() == true
+	assert '0x1'.is_int() == false
+	assert '0x1A'.is_int() == false
+	assert '-0x1'.is_int() == false
+	assert '-0x1A'.is_oct() == false
+	assert '0x'.is_int() == false
+	assert '0'.is_int() == true
+	assert '0xFF'.is_int() == false
+	assert '0xG'.is_int() == false
+	assert '-0xFF'.is_int() == false
+	assert '0.34'.is_int() == false
+	assert '-'.is_int() == false
+	assert '+'.is_int() == false
+	assert '+3'.is_int() == true
+	assert '+3232'.is_int() == true
 }
 
 fn test_trim_space() {
@@ -293,16 +608,16 @@ fn main() {
 }
 
 fn test_join() {
-	mut strings := ['a', 'b', 'c']
-	mut s := strings.join(' ')
+	mut strs := ['a', 'b', 'c']
+	mut s := strs.join(' ')
 	assert s == 'a b c'
-	strings = [
+	strs = [
 		'one
 two ',
 		'three!
 four!',
 	]
-	s = strings.join(' ')
+	s = strs.join(' ')
 	assert s.contains('one') && s.contains('two ') && s.contains('four')
 	empty := []string{len: 0}
 	assert empty.join('A') == ''
@@ -496,6 +811,52 @@ fn test_to_num() {
 	assert big.i64() == 93993993939322
 }
 
+fn test_to_u8_array() {
+	// empty string
+	assert ''.u8_array() == []
+	assert '0x'.u8_array() == []
+	assert '0X'.u8_array() == []
+	assert '0b'.u8_array() == []
+	assert '0B'.u8_array() == []
+	// invalid digit
+	assert '-123'.u8_array() == []
+	assert '1_2xt'.u8_array() == []
+	assert 'd1_2xt'.u8_array() == []
+
+	// ---------------------------------
+	// hex test
+	// invalid hex digit
+	assert '0X-123'.u8_array() == []
+	assert '0O12'.u8_array() == []
+	// odd number of digits
+	assert '0x1'.u8_array() == [u8(0x01)]
+	assert '0x123'.u8_array() == [u8(0x01), 0x23]
+	assert '0x1_23'.u8_array() == [u8(0x01), 0x23]
+
+	// long digits
+	long_u8 := [u8(0x00), 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
+		0xdd, 0xee, 0xff]
+	assert '0x00112233445566778899aabbccddeeff'.u8_array() == long_u8
+	assert '0x00_112_2334455667788_99aabbccddeeff'.u8_array() == long_u8
+	assert '0x00112233445566778899AABBCCDDEEFF'.u8_array() == long_u8
+	assert '0x001_12233445566778899A_ABBCCDDEEFF'.u8_array() == long_u8
+
+	// ---------------------------------
+	// bin test
+	// invalid bin digit
+	assert '0b-123'.u8_array() == []
+	assert '0B12'.u8_array() == []
+	// not enough length
+	assert '0b0'.u8_array() == [u8(0x00)]
+	assert '0b1'.u8_array() == [u8(0x01)]
+	assert '0b101'.u8_array() == [u8(0x05)]
+	assert '0b0101'.u8_array() == [u8(0x05)]
+	// long digits
+	assert '0b0101_0101'.u8_array() == [u8(0x55)]
+	assert '0b0101010110101010'.u8_array() == [u8(0x55), 0xaa]
+	assert '0b0101010110101010_0101010110101010'.u8_array() == [u8(0x55), 0xaa, 0x55, 0xaa]
+}
+
 fn test_inter_format_string() {
 	float_num := 1.52345
 	float_num_string := '-${float_num:.3f}-'
@@ -536,6 +897,16 @@ fn test_trim() {
 	assert 'banana'.trim('bna') == ''
 	assert 'abc'.trim('ac') == 'b'
 	assert 'aaabccc'.trim('ac') == 'b'
+}
+
+fn test_trim_indexes() {
+	mut left, mut right := 0, 0
+	left, right = '- -- - '.trim_indexes(' -')
+	assert left == 0 && right == 0
+	left, right = '- hello-world!\t'.trim_indexes(' -\t')
+	assert left == 2 && right == 14
+	left, right = 'abc'.trim_indexes('ac')
+	assert left == 1 && right == 2
 }
 
 fn test_trim_left() {
@@ -607,7 +978,6 @@ fn test_bytes_to_string() {
 
 fn test_charptr() {
 	foo := &char('VLANG'.str)
-	println(typeof(foo).name)
 	assert typeof(foo).name == '&char'
 	assert unsafe { foo.vstring() } == 'VLANG'
 	assert unsafe { foo.vstring_with_len(3) } == 'VLA'
@@ -719,7 +1089,6 @@ fn test_for_loop_two() {
 
 fn test_quote() {
 	a := `'`
-	println('testing double quotes')
 	b := 'hi'
 	assert b == 'hi'
 	assert a.str() == "'"
@@ -793,9 +1162,7 @@ fn test_trim_string_right() {
 fn test_raw() {
 	raw := r'raw\nstring'
 	lines := raw.split('\n')
-	println(lines)
 	assert lines.len == 1
-	println('raw string: "$raw"')
 
 	raw2 := r'Hello V\0'
 	assert raw2[7] == `\\`
@@ -817,8 +1184,7 @@ fn test_raw_with_quotes() {
 
 fn test_escape() {
 	a := 10
-	println("\"$a")
-	assert "\"$a" == '"10'
+	assert "\"${a}" == '"10'
 }
 
 fn test_atoi() {
@@ -833,7 +1199,6 @@ fn test_atoi() {
 
 fn test_raw_inter() {
 	world := 'world'
-	println(world)
 	s := r'hello\n$world'
 	assert s == r'hello\n$world'
 	assert s.contains('$')
@@ -842,16 +1207,15 @@ fn test_raw_inter() {
 fn test_c_r() {
 	// This used to break because of r'' and c''
 	c := 42
-	println('$c')
+	cs := '${c}'
 	r := 50
-	println('$r')
+	rs := '${r}'
 }
 
 fn test_inter_before_comptime_if() {
 	s := '123'
 	// This used to break ('123 $....')
 	$if linux {
-		println(s)
 	}
 	assert s == '123'
 }
@@ -859,9 +1223,8 @@ fn test_inter_before_comptime_if() {
 fn test_double_quote_inter() {
 	a := 1
 	b := 2
-	println('$a $b')
-	assert '$a $b' == '1 2'
-	assert '$a $b' == '1 2'
+	assert '${a} ${b}' == '1 2'
+	assert '${a} ${b}' == '1 2'
 }
 
 fn foo(b u8) u8 {
@@ -873,8 +1236,17 @@ fn filter(b u8) bool {
 }
 
 fn test_split_into_lines() {
-	line_content := 'Line'
-	text_crlf := '$line_content\r\n$line_content\r\n$line_content'
+	line_content := 'line content'
+
+	text_cr := '${line_content}\r${line_content}\r${line_content}'
+	lines_cr := text_cr.split_into_lines()
+
+	assert lines_cr.len == 3
+	for line in lines_cr {
+		assert line == line_content
+	}
+
+	text_crlf := '${line_content}\r\n${line_content}\r\n${line_content}'
 	lines_crlf := text_crlf.split_into_lines()
 
 	assert lines_crlf.len == 3
@@ -882,31 +1254,82 @@ fn test_split_into_lines() {
 		assert line == line_content
 	}
 
-	text_lf := '$line_content\n$line_content\n$line_content'
+	text_lf := '${line_content}\n${line_content}\n${line_content}'
 	lines_lf := text_lf.split_into_lines()
 
 	assert lines_lf.len == 3
 	for line in lines_lf {
 		assert line == line_content
 	}
+
+	text_mixed := '${line_content}\n${line_content}\r${line_content}'
+	lines_mixed := text_mixed.split_into_lines()
+
+	assert lines_mixed.len == 3
+	for line in lines_mixed {
+		assert line == line_content
+	}
+
+	text_mixed_trailers := '${line_content}\n${line_content}\r${line_content}\r\r\r\n\n\n\r\r'
+	lines_mixed_trailers := text_mixed_trailers.split_into_lines()
+
+	assert lines_mixed_trailers.len == 9
+	for line in lines_mixed_trailers {
+		assert line == line_content || line == ''
+	}
 }
 
-fn test_string_literal_with_backslash() {
-	a := 'HelloWorld'
+const single_backslash = '\\'
+const double_backslash = '\\\\'
+const newline = '\n'
+
+// vfmt off
+fn test_string_literal_with_backslash_followed_by_newline() {
+	// Note `\` is followed *directly* by a newline, then some more whitespace, then a non whitespace string.
+	// In this case, the \ is treated as line breaking, and the whitespace after that on the new line,
+	// should be just ignored.
+	//
+	// See also https://doc.rust-lang.org/reference/tokens.html#string-literals
+	// >> Both byte sequences are normally translated to U+000A, but as a special exception,
+	// when an unescaped U+005C character occurs immediately before the line-break,
+	// the U+005C character, the line-break, and all whitespace at the beginning of the
+	// next line are ignored.
+	a := 'Hello\
+             World'
 	assert a == 'HelloWorld'
 
-	b := 'OneTwoThree'
-	assert b == 'OneTwoThree'
-}
+	// Here, `\\\` means `\\` followed by `\`, followed by a newline.
+	// the first is a single escaped \, that should go into the literal, the second together with
+	// the newline and the whitespace after it, is a line-break, and should be simply ignored.
+	// Same with `\\\\\`, which is `\\\\`, followed by `\`, i.e. an escaped double backslash,
+	// and a line-break after it:
+	b := 'One \
+	         Two Three \\\
+             Four \\\\
+    Five \\\\\
+    end'
+	assert b == 'One Two Three ${single_backslash}Four ${double_backslash}${newline}    Five ${double_backslash}end'
+	
+	// Note `\\` is followed *directly* by a newline, but `\\` is just an escape for `\`,
+	// and thus the newline has no special meaning, and should go into the string literal.
+	c := 'Hello\\
+        World'
+	assert c == 'Hello\\\n        World'
 
-/*
+	d := 'One\\
+    Two Three \\
+    Four'
+	assert d == 'One\\\n    Two Three \\\n    Four'
+}
+// vfmt on
+
 type MyString = string
 
 fn test_string_alias() {
 	s := MyString('hi')
 	ss := s + '!'
+	assert ss == 'hi!'
 }
-*/
 
 // sort an array of structs, by their string field values
 
@@ -955,24 +1378,24 @@ fn test_interpolation_after_quoted_variable_still_works() {
 	tt := 'xyz'
 
 	// Basic interpolation, no internal quotes
-	yy := 'Replacing $rr with $tt'
+	yy := 'Replacing ${rr} with ${tt}'
 	assert yy == 'Replacing abc with xyz'
 
 	// Interpolation after quoted variable ending with 'r'quote
 	// that may be mistaken with the start of a raw string,
 	// ensure that it is not.
-	ss := 'Replacing "$rr" with "$tt"'
+	ss := 'Replacing "${rr}" with "${tt}"'
 	assert ss == 'Replacing "abc" with "xyz"'
-	zz := "Replacing '$rr' with '$tt'"
+	zz := "Replacing '${rr}' with '${tt}'"
 	assert zz == "Replacing 'abc' with 'xyz'"
 
 	// Interpolation after quoted variable ending with 'c'quote
 	// may be mistaken with the start of a c string, so
 	// check it is not.
 	cc := 'abc'
-	ccc := "Replacing '$cc' with '$tt'"
+	ccc := "Replacing '${cc}' with '${tt}'"
 	assert ccc == "Replacing 'abc' with 'xyz'"
-	cccq := 'Replacing "$cc" with "$tt"'
+	cccq := 'Replacing "${cc}" with "${tt}"'
 	assert cccq == 'Replacing "abc" with "xyz"'
 }
 
@@ -1020,4 +1443,69 @@ fn test_string_is_ascii() {
 
 fn test_string_with_zero_byte_escape() {
 	assert '\x00'.bytes() == [u8(0)]
+}
+
+fn test_is_blank() {
+	assert ''.is_blank()
+	assert ' '.is_blank()
+	assert ' \t'.is_blank()
+	assert ' \t
+
+'.is_blank()
+	assert ' \t\r'.is_blank()
+	assert ' \t\r
+
+'.is_blank()
+}
+
+fn test_indent_width() {
+	assert 'abc'.indent_width() == 0
+	assert ' abc'.indent_width() == 1
+	assert '  abc'.indent_width() == 2
+	assert '\tabc'.indent_width() == 1
+	assert '\t abc'.indent_width() == 2
+	assert '\t\tabc'.indent_width() == 2
+	assert '\t\t abc'.indent_width() == 3
+}
+
+fn test_index_u8() {
+	assert 'abcabca'.index_u8(`a`) == 0
+	assert 'abcabca'.index_u8(`b`) == 1
+	assert 'abcabca'.index_u8(`c`) == 2
+	//
+	assert 'abc'.index_u8(`d`) == -1
+	assert 'abc'.index_u8(`A`) == -1
+	assert 'abc'.index_u8(`B`) == -1
+	assert 'abc'.index_u8(`C`) == -1
+	//
+}
+
+fn test_index_last() {
+	assert 'abcabca'.index_last('ca')? == 5
+	assert 'abcabca'.index_last('ab')? == 3
+	assert 'abcabca'.index_last('b')? == 4
+	assert 'Zabcabca'.index_last('Z')? == 0
+	x := 'Zabcabca'.index_last('Y')
+	assert x == none
+	// TODO: `assert 'Zabcabca'.index_last('Y') == none` is a cgen error, 2023/12/04
+}
+
+fn test_index_u8_last() {
+	assert 'abcabca'.index_u8_last(`a`) == 6
+	assert 'abcabca'.index_u8_last(`c`) == 5
+	assert 'abcabca'.index_u8_last(`b`) == 4
+	assert 'Zabcabca'.index_u8_last(`Z`) == 0
+	//
+	assert 'abc'.index_u8(`d`) == -1
+	assert 'abc'.index_u8(`A`) == -1
+	assert 'abc'.index_u8(`B`) == -1
+	assert 'abc'.index_u8(`C`) == -1
+}
+
+fn test_contains_byte() {
+	assert 'abc abca'.contains_u8(`a`)
+	assert 'abc abca'.contains_u8(`b`)
+	assert 'abc abca'.contains_u8(`c`)
+	assert 'abc abca'.contains_u8(` `)
+	assert !'abc abca'.contains_u8(`A`)
 }

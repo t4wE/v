@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license that can be found in the LICENSE file.
 module builtin
 
@@ -9,6 +9,7 @@ import strings
 // updated. if you uncomment it you will see the issue
 // type rune = int
 
+// str converts a rune to string
 pub fn (c rune) str() string {
 	return utf32_to_str(u32(c))
 	/*
@@ -31,7 +32,7 @@ pub fn (c rune) str() string {
 }
 
 // string converts a rune array to a string
-[manualfree]
+@[manualfree]
 pub fn (ra []rune) string() string {
 	mut sb := strings.new_builder(ra.len)
 	sb.write_runes(ra)
@@ -43,7 +44,7 @@ pub fn (ra []rune) string() string {
 // repeat returns a new string with `count` number of copies of the rune it was called on.
 pub fn (c rune) repeat(count int) string {
 	if count < 0 {
-		panic('rune.repeat: count is negative: $count')
+		panic('rune.repeat: count is negative: ${count}')
 	} else if count == 0 {
 		return ''
 	} else if count == 1 {
@@ -54,7 +55,8 @@ pub fn (c rune) repeat(count int) string {
 	return res.repeat(count)
 }
 
-[manualfree]
+// bytes converts a rune to an array of bytes
+@[manualfree]
 pub fn (c rune) bytes() []u8 {
 	mut res := []u8{cap: 5}
 	res.len = unsafe { utf32_decode_to_buffer(u32(c), &u8(res.data)) }

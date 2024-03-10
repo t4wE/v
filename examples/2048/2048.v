@@ -7,7 +7,7 @@ import time
 
 struct App {
 mut:
-	gg          &gg.Context = unsafe { 0 }
+	gg          &gg.Context = unsafe { nil }
 	touch       TouchInfo
 	ui          Ui
 	theme       &Theme = themes[0]
@@ -18,7 +18,7 @@ mut:
 	state       GameState  = .play
 	tile_format TileFormat = .normal
 	moves       int
-	perf        &Perf = unsafe { 0 }
+	perf        &Perf = unsafe { nil }
 	is_ai_mode  bool
 }
 
@@ -45,81 +45,80 @@ struct Theme {
 	tile_colors     []gx.Color
 }
 
-const (
-	themes                = [
-		&Theme{
-			bg_color: gx.rgb(250, 248, 239)
-			padding_color: gx.rgb(143, 130, 119)
-			victory_color: gx.rgb(100, 160, 100)
-			game_over_color: gx.rgb(190, 50, 50)
-			text_color: gx.black
-			tile_colors: [
-				gx.rgb(205, 193, 180), /* Empty / 0 tile */
-				gx.rgb(238, 228, 218), /* 2 */
-				gx.rgb(237, 224, 200), /* 4 */
-				gx.rgb(242, 177, 121), /* 8 */
-				gx.rgb(245, 149, 99), /* 16 */
-				gx.rgb(246, 124, 95), /* 32 */
-				gx.rgb(246, 94, 59), /* 64 */
-				gx.rgb(237, 207, 114), /* 128 */
-				gx.rgb(237, 204, 97), /* 256 */
-				gx.rgb(237, 200, 80), /* 512 */
-				gx.rgb(237, 197, 63), /* 1024 */
-				gx.rgb(237, 194, 46),
-			]
-		},
-		&Theme{
-			bg_color: gx.rgb(55, 55, 55)
-			padding_color: gx.rgb(68, 60, 59)
-			victory_color: gx.rgb(100, 160, 100)
-			game_over_color: gx.rgb(190, 50, 50)
-			text_color: gx.white
-			tile_colors: [
-				gx.rgb(123, 115, 108),
-				gx.rgb(142, 136, 130),
-				gx.rgb(142, 134, 120),
-				gx.rgb(145, 106, 72),
-				gx.rgb(147, 89, 59),
-				gx.rgb(147, 74, 57),
-				gx.rgb(147, 56, 35),
-				gx.rgb(142, 124, 68),
-				gx.rgb(142, 122, 58),
-				gx.rgb(142, 120, 48),
-				gx.rgb(142, 118, 37),
-				gx.rgb(142, 116, 27),
-			]
-		},
-		&Theme{
-			bg_color: gx.rgb(38, 38, 66)
-			padding_color: gx.rgb(58, 50, 74)
-			victory_color: gx.rgb(100, 160, 100)
-			game_over_color: gx.rgb(190, 50, 50)
-			text_color: gx.white
-			tile_colors: [
-				gx.rgb(92, 86, 140),
-				gx.rgb(106, 99, 169),
-				gx.rgb(106, 97, 156),
-				gx.rgb(108, 79, 93),
-				gx.rgb(110, 66, 76),
-				gx.rgb(110, 55, 74),
-				gx.rgb(110, 42, 45),
-				gx.rgb(106, 93, 88),
-				gx.rgb(106, 91, 75),
-				gx.rgb(106, 90, 62),
-				gx.rgb(106, 88, 48),
-				gx.rgb(106, 87, 35),
-			]
-		},
-	]
-	window_title          = 'V 2048'
-	default_window_width  = 544
-	default_window_height = 560
-	animation_length      = 10 // frames
-	frames_per_ai_move    = 8
-	possible_moves        = [Direction.up, .right, .down, .left]
-	predictions_per_move  = 200
-	prediction_depth      = 8
-)
+const themes = [
+	&Theme{
+		bg_color: gx.rgb(250, 248, 239)
+		padding_color: gx.rgb(143, 130, 119)
+		victory_color: gx.rgb(100, 160, 100)
+		game_over_color: gx.rgb(190, 50, 50)
+		text_color: gx.black
+		tile_colors: [
+			gx.rgb(205, 193, 180), // Empty / 0 tile
+			gx.rgb(238, 228, 218), // 2
+			gx.rgb(237, 224, 200), // 4
+			gx.rgb(242, 177, 121), // 8
+			gx.rgb(245, 149, 99), // 16
+			gx.rgb(246, 124, 95), // 32
+			gx.rgb(246, 94, 59), // 64
+			gx.rgb(237, 207, 114), // 128
+			gx.rgb(237, 204, 97), // 256
+			gx.rgb(237, 200, 80), // 512
+			gx.rgb(237, 197, 63), // 1024
+			gx.rgb(237, 194, 46),
+		]
+	},
+	&Theme{
+		bg_color: gx.rgb(55, 55, 55)
+		padding_color: gx.rgb(68, 60, 59)
+		victory_color: gx.rgb(100, 160, 100)
+		game_over_color: gx.rgb(190, 50, 50)
+		text_color: gx.white
+		tile_colors: [
+			gx.rgb(123, 115, 108),
+			gx.rgb(142, 136, 130),
+			gx.rgb(142, 134, 120),
+			gx.rgb(145, 106, 72),
+			gx.rgb(147, 89, 59),
+			gx.rgb(147, 74, 57),
+			gx.rgb(147, 56, 35),
+			gx.rgb(142, 124, 68),
+			gx.rgb(142, 122, 58),
+			gx.rgb(142, 120, 48),
+			gx.rgb(142, 118, 37),
+			gx.rgb(142, 116, 27),
+		]
+	},
+	&Theme{
+		bg_color: gx.rgb(38, 38, 66)
+		padding_color: gx.rgb(58, 50, 74)
+		victory_color: gx.rgb(100, 160, 100)
+		game_over_color: gx.rgb(190, 50, 50)
+		text_color: gx.white
+		tile_colors: [
+			gx.rgb(92, 86, 140),
+			gx.rgb(106, 99, 169),
+			gx.rgb(106, 97, 156),
+			gx.rgb(108, 79, 93),
+			gx.rgb(110, 66, 76),
+			gx.rgb(110, 55, 74),
+			gx.rgb(110, 42, 45),
+			gx.rgb(106, 93, 88),
+			gx.rgb(106, 91, 75),
+			gx.rgb(106, 90, 62),
+			gx.rgb(106, 88, 48),
+			gx.rgb(106, 87, 35),
+		]
+	},
+]
+const window_title = 'V 2048'
+const default_window_width = 544
+const default_window_height = 560
+const animation_length = 10 // frames
+
+const frames_per_ai_move = 8
+const possible_moves = [Direction.up, .right, .down, .left]
+const predictions_per_move = 200
+const prediction_depth = 8
 
 // Used for performance monitoring when `-d showfps` is passed, unused / optimized out otherwise
 struct Perf {
@@ -200,7 +199,7 @@ enum Direction {
 }
 
 // Utility functions
-[inline]
+@[inline]
 fn avg(a int, b int) int {
 	return (a + b) / 2
 }
@@ -357,7 +356,7 @@ fn (mut app App) new_game() {
 	app.new_random_tile()
 }
 
-[inline]
+@[inline]
 fn (mut app App) check_for_victory() {
 	for y in 0 .. 4 {
 		for x in 0 .. 4 {
@@ -370,7 +369,7 @@ fn (mut app App) check_for_victory() {
 	}
 }
 
-[inline]
+@[inline]
 fn (mut app App) check_for_game_over() {
 	if app.board.is_game_over() {
 		app.state = .over
@@ -492,7 +491,7 @@ fn (mut app App) ai_move() {
 			bestprediction = predictions[move_idx]
 		}
 	}
-	eprintln('Simulation time: ${think_time:4}ms |  best $bestprediction')
+	eprintln('Simulation time: ${think_time:4}ms |  best ${bestprediction}')
 	app.move(bestprediction.move)
 }
 
@@ -547,7 +546,7 @@ fn (app &App) label_format(kind LabelKind) gx.TextCfg {
 	}
 }
 
-[inline]
+@[inline]
 fn (mut app App) set_theme(idx int) {
 	theme := themes[idx]
 	app.theme_idx = idx
@@ -613,8 +612,8 @@ fn (app &App) draw() {
 		app.gg.draw_text(ww / 2, (m * 8 / 10) + ypad, msg2, app.label_format(.score_end))
 	}
 	// Draw at the end, so that it's on top of the victory / game over overlays
-	app.gg.draw_text(labelx, labely, 'Points: $app.board.points', app.label_format(.points))
-	app.gg.draw_text(ww - labelx, labely, 'Moves: $app.moves', app.label_format(.moves))
+	app.gg.draw_text(labelx, labely, 'Points: ${app.board.points}', app.label_format(.points))
+	app.gg.draw_text(ww - labelx, labely, 'Moves: ${app.moves}', app.label_format(.moves))
 }
 
 fn (app &App) draw_tiles() {
@@ -654,13 +653,13 @@ fn (app &App) draw_tiles() {
 						app.gg.draw_text(xpos, ypos, '${1 << tidx}', fmt)
 					}
 					.log {
-						app.gg.draw_text(xpos, ypos, '$tidx', fmt)
+						app.gg.draw_text(xpos, ypos, '${tidx}', fmt)
 					}
 					.exponent {
 						app.gg.draw_text(xpos, ypos, '2', fmt)
 						fs2 := int(f32(fmt.size) * 0.67)
 						app.gg.draw_text(xpos + app.ui.tile_size / 10, ypos - app.ui.tile_size / 8,
-							'$tidx', gx.TextCfg{
+							'${tidx}', gx.TextCfg{
 							...fmt
 							size: fs2
 							align: gx.HorizontalAlign.left
@@ -761,20 +760,20 @@ fn (mut app App) handle_swipe() {
 	}
 }
 
-[inline]
+@[inline]
 fn (mut app App) next_theme() {
 	app.set_theme(if app.theme_idx == themes.len - 1 { 0 } else { app.theme_idx + 1 })
 }
 
-[inline]
+@[inline]
 fn (mut app App) next_tile_format() {
-	app.tile_format = TileFormat(int(app.tile_format) + 1)
+	app.tile_format = unsafe { TileFormat(int(app.tile_format) + 1) }
 	if app.tile_format == .end_ {
 		app.tile_format = .normal
 	}
 }
 
-[inline]
+@[inline]
 fn (mut app App) undo() {
 	if app.undo.len > 0 {
 		undo := app.undo.pop()
@@ -916,13 +915,6 @@ fn main() {
 	$if android {
 		font_path = 'fonts/RobotoMono-Regular.ttf'
 	}
-	mut window_title_ := 'V 2048'
-	// TODO: Make emcc a real platform ifdef
-	$if emscripten ? {
-		// in emscripten, sokol uses `window_title` as the selector to the canvas it'll render to,
-		// and since `document.querySelector('V 2048')` isn't valid JS, we use `canvas` instead
-		window_title_ = 'canvas'
-	}
 	app.perf = &Perf{}
 	app.gg = gg.new_context(
 		bg_color: app.theme.bg_color
@@ -930,7 +922,7 @@ fn main() {
 		height: default_window_height
 		sample_count: 4 // higher quality curves
 		create_window: true
-		window_title: window_title_
+		window_title: 'V 2048'
 		frame_fn: frame
 		event_fn: on_event
 		init_fn: init

@@ -9,34 +9,32 @@ import term.ui as tui
 import encoding.utf8
 import encoding.utf8.east_asian
 
-const (
-	rune_digits        = [`0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`]
+const rune_digits = [`0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`]
 
-	zero_width_unicode = [
-		`\u034f`, // U+034F COMBINING GRAPHEME JOINER
-		`\u061c`, // U+061C ARABIC LETTER MARK
-		`\u17b4`, // U+17B4 KHMER VOWEL INHERENT AQ
-		`\u17b5`, // U+17B5 KHMER VOWEL INHERENT AA
-		`\u200a`, // U+200A HAIR SPACE
-		`\u200b`, // U+200B ZERO WIDTH SPACE
-		`\u200c`, // U+200C ZERO WIDTH NON-JOINER
-		`\u200d`, // U+200D ZERO WIDTH JOINER
-		`\u200e`, // U+200E LEFT-TO-RIGHT MARK
-		`\u200f`, // U+200F RIGHT-TO-LEFT MARK
-		`\u2060`, // U+2060 WORD JOINER
-		`\u2061`, // U+2061 FUNCTION APPLICATION
-		`\u2062`, // U+2062 INVISIBLE TIMES
-		`\u2063`, // U+2063 INVISIBLE SEPARATOR
-		`\u2064`, // U+2064 INVISIBLE PLUS
-		`\u206a`, // U+206A INHIBIT SYMMETRIC SWAPPING
-		`\u206b`, // U+206B ACTIVATE SYMMETRIC SWAPPING
-		`\u206c`, // U+206C INHIBIT ARABIC FORM SHAPING
-		`\u206d`, // U+206D ACTIVATE ARABIC FORM SHAPING
-		`\u206e`, // U+206E NATIONAL DIGIT SHAPES
-		`\u206f`, // U+206F NOMINAL DIGIT SHAPES
-		`\ufeff`, // U+FEFF ZERO WIDTH NO-BREAK SPACE
-	]
-)
+const zero_width_unicode = [
+	`\u034f`, // U+034F COMBINING GRAPHEME JOINER
+	`\u061c`, // U+061C ARABIC LETTER MARK
+	`\u17b4`, // U+17B4 KHMER VOWEL INHERENT AQ
+	`\u17b5`, // U+17B5 KHMER VOWEL INHERENT AA
+	`\u200a`, // U+200A HAIR SPACE
+	`\u200b`, // U+200B ZERO WIDTH SPACE
+	`\u200c`, // U+200C ZERO WIDTH NON-JOINER
+	`\u200d`, // U+200D ZERO WIDTH JOINER
+	`\u200e`, // U+200E LEFT-TO-RIGHT MARK
+	`\u200f`, // U+200F RIGHT-TO-LEFT MARK
+	`\u2060`, // U+2060 WORD JOINER
+	`\u2061`, // U+2061 FUNCTION APPLICATION
+	`\u2062`, // U+2062 INVISIBLE TIMES
+	`\u2063`, // U+2063 INVISIBLE SEPARATOR
+	`\u2064`, // U+2064 INVISIBLE PLUS
+	`\u206a`, // U+206A INHIBIT SYMMETRIC SWAPPING
+	`\u206b`, // U+206B ACTIVATE SYMMETRIC SWAPPING
+	`\u206c`, // U+206C INHIBIT ARABIC FORM SHAPING
+	`\u206d`, // U+206D ACTIVATE ARABIC FORM SHAPING
+	`\u206e`, // U+206E NATIONAL DIGIT SHAPES
+	`\u206f`, // U+206F NOMINAL DIGIT SHAPES
+	`\ufeff`, // U+FEFF ZERO WIDTH NO-BREAK SPACE
+]
 
 enum Movement {
 	up
@@ -57,8 +55,8 @@ pub:
 
 struct App {
 mut:
-	tui           &tui.Context = unsafe { 0 }
-	ed            &Buffer      = unsafe { 0 }
+	tui           &tui.Context = unsafe { nil }
+	ed            &Buffer      = unsafe { nil }
 	current_file  int
 	files         []string
 	status        string
@@ -119,7 +117,7 @@ fn (mut a App) footer() {
 	finfo := if a.cfile().len > 0 { ' (' + os.file_name(a.cfile()) + ')' } else { '' }
 	mut status := a.status
 	a.tui.draw_text(0, h - 1, '─'.repeat(w))
-	footer := '$finfo Line ${b.cursor.pos_y + 1:4}/${b.lines.len:-4}, Column ${b.cursor.pos_x + 1:3}/${b.cur_line().len:-3} index: ${b.cursor_index():5} (ESC = quit, Ctrl+s = save)'
+	footer := '${finfo} Line ${b.cursor.pos_y + 1:4}/${b.lines.len:-4}, Column ${b.cursor.pos_x + 1:3}/${b.cur_line().len:-3} index: ${b.cursor_index():5} (ESC = quit, Ctrl+s = save)'
 	if footer.len < w {
 		a.tui.draw_text((w - footer.len) / 2, h, footer)
 	} else if footer.len == w {
@@ -140,7 +138,7 @@ fn (mut a App) footer() {
 			g: 0
 			b: 0
 		)
-		a.tui.draw_text((w + 4 - status.len) / 2, h - 1, ' $status ')
+		a.tui.draw_text((w + 4 - status.len) / 2, h - 1, ' ${status} ')
 		a.tui.reset()
 		a.t -= 33
 	}
@@ -243,7 +241,7 @@ fn (mut b Buffer) put(s string) {
 	}
 	$if debug {
 		flat := s.replace('\n', r'\n')
-		eprintln(@MOD + '.' + @STRUCT + '::' + @FN + ' "$flat"')
+		eprintln(@MOD + '.' + @STRUCT + '::' + @FN + ' "${flat}"')
 	}
 }
 
@@ -349,7 +347,7 @@ fn (mut b Buffer) del(amount int) string {
 	}
 	$if debug {
 		flat := removed.replace('\n', r'\n')
-		eprintln(@MOD + '.' + @STRUCT + '::' + @FN + ' "$flat"')
+		eprintln(@MOD + '.' + @STRUCT + '::' + @FN + ' "${flat}"')
 	}
 	return removed
 }
@@ -473,9 +471,8 @@ fn (c Cursor) xy() (int, int) {
 }
 
 // App callbacks
-fn init(x voidptr) {
-	mut a := &App(x)
-	a.init_file()
+fn init(mut app App) {
+	app.init_file()
 }
 
 fn (mut a App) init_file() {
@@ -523,8 +520,7 @@ fn (mut a App) magnet_cursor_x() {
 	}
 }
 
-fn frame(x voidptr) {
-	mut a := &App(x)
+fn frame(mut a App) {
 	mut ed := a.ed
 	a.tui.clear()
 	scroll_limit := a.view_height()
@@ -551,8 +547,7 @@ fn frame(x voidptr) {
 	a.tui.flush()
 }
 
-fn event(e &tui.Event, x voidptr) {
-	mut a := &App(x)
+fn event(e &tui.Event, mut a App) {
 	mut buffer := a.ed
 	if e.typ == .key_down {
 		match e.code {
@@ -634,6 +629,12 @@ fn event(e &tui.Event, x voidptr) {
 	}
 }
 
+type InitFn = fn (voidptr)
+
+type EventFn = fn (&tui.Event, voidptr)
+
+type FrameFn = fn (voidptr)
+
 fn main() {
 	mut files := []string{}
 	if os.args.len > 1 {
@@ -644,10 +645,10 @@ fn main() {
 	}
 	a.tui = tui.init(
 		user_data: a
-		init_fn: init
-		frame_fn: frame
-		event_fn: event
+		init_fn: InitFn(init)
+		frame_fn: FrameFn(frame)
+		event_fn: EventFn(event)
 		capture_events: true
 	)
-	a.tui.run()?
+	a.tui.run()!
 }

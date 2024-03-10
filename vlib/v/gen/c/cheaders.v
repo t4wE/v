@@ -14,13 +14,6 @@ const c_commit_hash_default = '
 #endif
 '
 
-// V_CURRENT_COMMIT_HASH is updated, when V is rebuilt inside a git repo.
-const c_current_commit_hash_default = '
-#ifndef V_CURRENT_COMMIT_HASH
-	#define V_CURRENT_COMMIT_HASH "@@@"
-#endif
-'
-
 const c_concurrency_helpers = '
 typedef struct __shared_map __shared_map;
 struct __shared_map {
@@ -61,9 +54,9 @@ static inline void __sort_ptr(uintptr_t a[], bool b[], int l) {
 // Inspired from Chris Wellons's work
 // https://nullprogram.com/blog/2017/01/08/
 
-fn c_closure_helpers(pref &pref.Preferences) string {
+fn c_closure_helpers(pref_ &pref.Preferences) string {
 	mut builder := strings.new_builder(2048)
-	if pref.os != .windows {
+	if pref_.os != .windows {
 		builder.writeln('#include <sys/mman.h>')
 	}
 
@@ -91,7 +84,6 @@ static char __CLOSURE_GET_DATA_BYTES[] = {
 	0x66, 0x4C, 0x0F, 0x7E, 0xF8,  // movq rax, xmm15
 	0xC3                           // ret
 };
-#define __CLOSURE_DATA_OFFSET 0x400C
 #elif defined(__V_x86)
 static char __closure_thunk[] = {
 	0xe8, 0x00, 0x00, 0x00, 0x00,        // call here
@@ -107,7 +99,6 @@ static char __CLOSURE_GET_DATA_BYTES[] = {
 	0xc3                                 // ret
 };
 
-#define __CLOSURE_DATA_OFFSET 0x4012
 #elif defined(__V_arm64)
 static char __closure_thunk[] = {
 	0x11, 0x00, 0xFE, 0x58,  // ldr x17, userdata
@@ -132,7 +123,26 @@ static char __CLOSURE_GET_DATA_BYTES[] = {
 	0x04, 0x00, 0x10, 0xE5,
 	0x1E, 0xFF, 0x2F, 0xE1
 };
-#define __CLOSURE_DATA_OFFSET 0xFFC
+#elif defined (__V_rv64)
+static char __closure_thunk[] = {
+	0x97, 0xCF, 0xFF, 0xFF,  // auipc t6, 0xffffc
+	0x03, 0xBF, 0x8F, 0x00,  // ld    t5, 8(t6)
+	0x67, 0x00, 0x0F, 0x00   // jr    t5
+};
+static char __CLOSURE_GET_DATA_BYTES[] = {
+	0x03, 0xb5, 0x0f, 0x00,  // ld    a0, 0(t6)
+	0x67, 0x80, 0x00, 0x00   // ret
+};
+#elif defined (__V_rv32)
+static char __closure_thunk[] = {
+	0x97, 0xCF, 0xFF, 0xFF,  // auipc t6, 0xffffc
+	0x03, 0xAF, 0x4F, 0x00,  // lw    t5, 4(t6)
+	0x67, 0x00, 0x0F, 0x00   // jr    t5
+};
+static char __CLOSURE_GET_DATA_BYTES[] = {
+	0x03, 0xA5, 0x0F, 0x00,  // lw    a0, 0(t6)
+	0x67, 0x80, 0x00, 0x00   // ret
+};
 #endif
 
 static void*(*__CLOSURE_GET_DATA)(void) = 0;
@@ -236,8 +246,8 @@ static void* __closure_create(void* fn, void* data) {
 
 const c_common_macros = '
 #define EMPTY_VARG_INITIALIZATION 0
-#define EMPTY_STRUCT_INITIALIZATION 0
-#define EMPTY_STRUCT_DECLARATION voidptr _dummy_pad
+#define EMPTY_STRUCT_DECLARATION
+#define EMPTY_STRUCT_INITIALIZATION
 // Due to a tcc bug, the length of an array needs to be specified, but GCC crashes if it is...
 #define EMPTY_ARRAY_OF_ELEMS(x,n) (x[])
 #define TCCSKIP(x) x
@@ -264,6 +274,18 @@ const c_common_macros = '
 	#define __V_architecture 3
 #endif
 
+#if defined(__riscv) && __riscv_xlen == 64
+	#define __V_rv64  1
+	#undef __V_architecture
+	#define __V_architecture 4
+#endif
+
+#if defined(__riscv) && __riscv_xlen == 32
+	#define __V_rv32  1
+	#undef __V_architecture
+	#define __V_architecture 5
+#endif
+
 #if defined(__i386__) || defined(_M_IX86)
 	#define __V_x86    1
 	#undef __V_architecture
@@ -283,16 +305,32 @@ const c_common_macros = '
 #ifdef __clang__
 	#undef __V_GCC__
 #endif
+
 #ifdef _MSC_VER
 	#undef __V_GCC__
+	#undef EMPTY_STRUCT_DECLARATION
 	#undef EMPTY_STRUCT_INITIALIZATION
+	#define EMPTY_STRUCT_DECLARATION unsigned char _dummy_pad
 	#define EMPTY_STRUCT_INITIALIZATION 0
+#endif
+
+#ifndef _WIN32
+	#if defined __has_include
+		#if __has_include (<execinfo.h>)
+			#include <execinfo.h>
+		#else
+			// On linux: int backtrace(void **__array, int __size);
+			// On BSD: size_t backtrace(void **, size_t);
+		#endif
+	#endif
 #endif
 
 #ifdef __TINYC__
 	#define _Atomic volatile
 	#undef EMPTY_STRUCT_DECLARATION
-	#define EMPTY_STRUCT_DECLARATION voidptr _dummy_pad
+	#undef EMPTY_STRUCT_INITIALIZATION
+	#define EMPTY_STRUCT_DECLARATION unsigned char _dummy_pad
+	#define EMPTY_STRUCT_INITIALIZATION 0
 	#undef EMPTY_ARRAY_OF_ELEMS
 	#define EMPTY_ARRAY_OF_ELEMS(x,n) (x[n])
 	#undef __NOINLINE
@@ -304,7 +342,6 @@ const c_common_macros = '
 	#define TCCSKIP(x)
 	// #include <byteswap.h>
 	#ifndef _WIN32
-		#include <execinfo.h>
 		int tcc_backtrace(const char *fmt, ...);
 	#endif
 #endif
@@ -316,7 +353,7 @@ const c_common_macros = '
 
 // for __offset_of
 #ifndef __offsetof
-	#define __offsetof(PTYPE,FIELDNAME) ((size_t)((char *)&((PTYPE *)0)->FIELDNAME - (char *)0))
+	#define __offsetof(PTYPE,FIELDNAME) ((size_t)(&((PTYPE *)0)->FIELDNAME))
 #endif
 
 #define OPTION_CAST(x) (x)
@@ -391,7 +428,7 @@ const c_common_macros = '
 	#endif
 	# if !defined(__TINYC__) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 	#  define VNORETURN _Noreturn
-	# elif defined(__GNUC__) && __GNUC__ >= 2
+	# elif !defined(VNORETURN) && defined(__GNUC__) && __GNUC__ >= 2
 	#  define VNORETURN __attribute__((noreturn))
 	# endif
 	#ifndef VNORETURN
@@ -402,19 +439,16 @@ const c_common_macros = '
 #if !defined(VUNREACHABLE)
 	#if defined(__GNUC__) && !defined(__clang__)
 		#define V_GCC_VERSION  (__GNUC__ * 10000L + __GNUC_MINOR__ * 100L + __GNUC_PATCHLEVEL__)
-		#if (V_GCC_VERSION >= 40500L)
+		#if (V_GCC_VERSION >= 40500L) && !defined(__TINYC__)
 			#define VUNREACHABLE()  do { __builtin_unreachable(); } while (0)
 		#endif
 	#endif
-	#if defined(__clang__) && defined(__has_builtin)
+	#if defined(__clang__) && defined(__has_builtin) && !defined(__TINYC__)
 		#if __has_builtin(__builtin_unreachable)
 			#define VUNREACHABLE()  do { __builtin_unreachable(); } while (0)
 		#endif
 	#endif
 	#ifndef VUNREACHABLE
-		#define VUNREACHABLE() do { } while (0)
-	#endif
-	#if defined(__FreeBSD__) && defined(__TINYC__)
 		#define VUNREACHABLE() do { } while (0)
 	#endif
 #endif
@@ -472,14 +506,6 @@ typedef int (*qsort_callback_func)(const void*, const void*);
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef _WIN32
-	#if defined __has_include
-		#if __has_include (<execinfo.h>)
-			#include <execinfo.h>
-		#endif
-	#endif
-#endif
-
 #include <stdarg.h> // for va_list
 
 //================================== GLOBALS =================================*/
@@ -490,7 +516,7 @@ void _vcleanup(void);
 #define _ARR_LEN(a) ( (sizeof(a)) / (sizeof(a[0])) )
 
 void v_free(voidptr ptr);
-voidptr memdup(voidptr src, int sz);
+//voidptr memdup(voidptr src, isize sz);
 
 #if INTPTR_MAX == INT32_MAX
 	#define TARGET_IS_32BIT 1
@@ -520,7 +546,7 @@ voidptr memdup(voidptr src, int sz);
 	#error Cygwin is not supported, please use MinGW or Visual Studio.
 #endif
 
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__vinix__) || defined(__serenity__) || defined(__sun)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__DragonFly__) || defined(__vinix__) || defined(__serenity__) || defined(__sun) || defined(__plan9__)
 	#include <sys/types.h>
 	#include <sys/wait.h> // os__wait uses wait on nix
 #endif
@@ -563,10 +589,7 @@ voidptr memdup(voidptr src, int sz);
 		#define _Atomic volatile
 
 		// MSVC cannot parse some things properly
-		#undef EMPTY_STRUCT_DECLARATION
 		#undef OPTION_CAST
-
-		#define EMPTY_STRUCT_DECLARATION voidptr _dummy_pad
 		#define OPTION_CAST(x)
 		#undef __NOINLINE
 		#undef __IRQHANDLER
@@ -616,7 +639,8 @@ typedef uint64_t u64;
 typedef uint32_t u32;
 typedef uint8_t u8;
 typedef uint16_t u16;
-//typedef uint8_t byte;
+typedef u8 byte;
+typedef int32_t i32;
 typedef uint32_t rune;
 typedef size_t usize;
 typedef ptrdiff_t isize;
@@ -687,7 +711,7 @@ void _vcleanup();
 #define _ARR_LEN(a) ( (sizeof(a)) / (sizeof(a[0])) )
 
 void v_free(voidptr ptr);
-voidptr memdup(voidptr src, int sz);
+voidptr memdup(voidptr src, isize size);
 
 '
 
@@ -769,7 +793,7 @@ static inline uint64_t _wymix(uint64_t A, uint64_t B){ _wymum(&A,&B); return A^B
 #if (WYHASH_LITTLE_ENDIAN)
 	static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v;}
 	static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v;}
-#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__)
+#elif !defined(__TINYC__) && (defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__))
 	static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return __builtin_bswap64(v);}
 	static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return __builtin_bswap32(v);}
 #elif defined(_MSC_VER)
@@ -811,13 +835,13 @@ static inline uint64_t wyhash(const void *key, size_t len, uint64_t seed, const 
 	return _wymix(secret[1]^len,_wymix(a^secret[1],b^seed));
 }
 // the default secret parameters
-static const uint64_t _wyp[4] = {0xa0761d6478bd642full, 0xe7037ed1a0b428dbull, 0x8ebc6af09c88c6e3ull, 0x589965cc75374cc3ull};
+static const uint64_t _wyp[4] = {0xa0761d6478bd642f, 0xe7037ed1a0b428db, 0x8ebc6af09c88c6e3, 0x589965cc75374cc3};
 
 // a useful 64bit-64bit mix function to produce deterministic pseudo random numbers that can pass BigCrush and PractRand
-static inline uint64_t wyhash64(uint64_t A, uint64_t B){ A^=0xa0761d6478bd642full; B^=0xe7037ed1a0b428dbull; _wymum(&A,&B); return _wymix(A^0xa0761d6478bd642full,B^0xe7037ed1a0b428dbull);}
+static inline uint64_t wyhash64(uint64_t A, uint64_t B){ A^=0xa0761d6478bd642f; B^=0xe7037ed1a0b428db; _wymum(&A,&B); return _wymix(A^0xa0761d6478bd642f,B^0xe7037ed1a0b428db);}
 
 // the wyrand PRNG that pass BigCrush and PractRand
-static inline uint64_t wyrand(uint64_t *seed){ *seed+=0xa0761d6478bd642full; return _wymix(*seed,*seed^0xe7037ed1a0b428dbull);}
+static inline uint64_t wyrand(uint64_t *seed){ *seed+=0xa0761d6478bd642f; return _wymix(*seed,*seed^0xe7037ed1a0b428db);}
 
 #ifndef __vinix__
 // convert any 64 bit pseudo random numbers to uniform distribution [0,1). It can be combined with wyrand, wyhash64 or wyhash.

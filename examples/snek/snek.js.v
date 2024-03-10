@@ -5,13 +5,11 @@ import time
 import rand
 
 // constants
-const (
-	top_height   = 100
-	canvas_size  = 700
-	game_size    = 17
-	tile_size    = canvas_size / game_size
-	tick_rate_ms = 100
-)
+const top_height = 100
+const canvas_size = 700
+const game_size = 17
+const tile_size = canvas_size / game_size
+const tick_rate_ms = 100
 
 // types
 struct Pos {
@@ -36,7 +34,7 @@ enum Direction {
 
 struct App {
 mut:
-	gg         &gg.Context
+	gg         &gg.Context = unsafe { nil }
 	score      int
 	snake      []Pos
 	dir        Direction
@@ -153,7 +151,7 @@ fn on_frame(mut app App) {
 
 	// drawing top
 	app.gg.draw_rect(0, 0, canvas_size, top_height, gx.black)
-	app.gg.draw_text(350, top_height / 2, 'Score: $app.score', gx.TextCfg{
+	app.gg.draw_text(350, top_height / 2, 'Score: ${app.score}', gx.TextCfg{
 		color: gx.white
 		align: .center
 		vertical_align: .middle
@@ -190,7 +188,7 @@ fn main() {
 		create_window: true
 		resizable: false
 		window_title: 'snek'
-		canvas: 'canvas'
+		html5_canvas_name: 'canvas'
 	)
 
 	app.gg.run()

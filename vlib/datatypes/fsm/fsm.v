@@ -4,17 +4,24 @@ pub type EventHandlerFn = fn (receiver voidptr, from string, to string)
 
 pub type ConditionFn = fn (receiver voidptr, from string, to string) bool
 
+fn dummy_event_handler_fn(receiver voidptr, from string, to string) {
+}
+
+fn dummy_condition_fn(receiver voidptr, from string, to string) bool {
+	return true
+}
+
 struct State {
 mut:
-	entry_handler EventHandlerFn
-	run_handler   EventHandlerFn
-	exit_handler  EventHandlerFn
+	entry_handler EventHandlerFn = dummy_event_handler_fn
+	run_handler   EventHandlerFn = dummy_event_handler_fn
+	exit_handler  EventHandlerFn = dummy_event_handler_fn
 }
 
 struct Transition {
 mut:
 	to                string
-	condition_handler ConditionFn = unsafe { nil }
+	condition_handler ConditionFn = dummy_condition_fn
 }
 
 pub struct StateMachine {
@@ -28,11 +35,12 @@ pub fn new() StateMachine {
 	return StateMachine{}
 }
 
-pub fn (mut s StateMachine) set_state(name string) ? {
+pub fn (mut s StateMachine) set_state(name string) ! {
 	if name in s.states {
 		s.current_state = name
+	} else {
+		return error('unknown state: ${name}')
 	}
-	return error('unknown state: $name')
 }
 
 pub fn (mut s StateMachine) get_state() string {
@@ -62,7 +70,7 @@ pub fn (mut s StateMachine) add_transition(from string, to string, condition_han
 	s.transitions[from] = [t]
 }
 
-pub fn (mut s StateMachine) run(receiver voidptr) ? {
+pub fn (mut s StateMachine) run(receiver voidptr) ! {
 	from_state := s.current_state
 	mut to_state := s.current_state
 	if transitions := s.transitions[s.current_state] {

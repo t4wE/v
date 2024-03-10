@@ -6,12 +6,10 @@ import gx
 import rand
 import sokol.sgl
 
-const (
-	win_width     = 800
-	win_height    = 600
-	max_stars     = 5000
-	max_v_letters = 5
-)
+const win_width = 800
+const win_height = 600
+const max_stars = 5000
+const max_v_letters = 5
 
 struct Star {
 mut:
@@ -37,7 +35,7 @@ mut:
 
 struct App {
 mut:
-	gg        &gg.Context
+	gg        &gg.Context = unsafe { nil }
 	image     gg.Image
 	stars     []Star
 	v_letters []VLetter
@@ -82,7 +80,7 @@ fn main() {
 
 fn init_images(mut app App) {
 	mut logo_path := os.resource_abs_path(os.join_path('..', 'assets', 'logo.png'))
-	app.image = app.gg.create_image(logo_path)
+	app.image = app.gg.create_image(logo_path) or { panic(err) }
 }
 
 fn frame(mut app App) {

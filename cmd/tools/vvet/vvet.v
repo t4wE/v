@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2023 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license that can be found in the LICENSE file.
 module main
 
@@ -14,9 +14,10 @@ import term
 struct Vet {
 	opt Options
 mut:
-	errors []vet.Error
-	warns  []vet.Error
-	file   string
+	errors  []vet.Error
+	warns   []vet.Error
+	notices []vet.Error
+	file    string
 }
 
 struct Options {
@@ -29,6 +30,7 @@ struct Options {
 }
 
 const term_colors = term.can_show_color_on_stderr()
+const clean_seq = ['[', '', ']', '', ' ', '']
 
 fn main() {
 	vet_options := cmdline.options_after(os.args, ['vet'])
@@ -50,14 +52,14 @@ fn main() {
 	}
 	for path in paths {
 		if !os.exists(path) {
-			eprintln('File/folder $path does not exist')
+			eprintln('File/folder ${path} does not exist')
 			continue
 		}
 		if os.is_file(path) {
 			vt.vet_file(path)
 		}
 		if os.is_dir(path) {
-			vt.vprintln("vetting folder: '$path' ...")
+			vt.vprintln("vetting folder: '${path}' ...")
 			vfiles := os.walk_ext(path, '.v')
 			vvfiles := os.walk_ext(path, '.vv')
 			mut files := []string{}
@@ -69,6 +71,9 @@ fn main() {
 		}
 	}
 	vfmt_err_count := vt.errors.filter(it.fix == .vfmt).len
+	for n in vt.notices {
+		eprintln(vt.e2string(n))
+	}
 	if vt.opt.show_warnings {
 		for w in vt.warns {
 			eprintln(vt.e2string(w))
@@ -87,22 +92,23 @@ fn main() {
 
 // vet_file vets the file read from `path`.
 fn (mut vt Vet) vet_file(path string) {
-	if path.contains('/tests/') && !vt.opt.is_force {
+	if !vt.opt.is_force && (path.contains('/tests/') || path.contains('/slow_tests/')) {
 		// skip all /tests/ files, since usually their content is not
 		// important enough to be documented/vetted, and they may even
 		// contain intentionally invalid code.
-		vt.vprintln("skipping test file: '$path' ...")
+		vt.vprintln("skipping test file: '${path}' ...")
 		return
 	}
 	vt.file = path
 	mut prefs := pref.new_preferences()
 	prefs.is_vet = true
 	prefs.is_vsh = path.ends_with('.vsh')
-	table := ast.new_table()
-	vt.vprintln("vetting file '$path'...")
-	_, errors := parser.parse_vet_file(path, table, prefs)
+	mut table := ast.new_table()
+	vt.vprintln("vetting file '${path}'...")
+	_, errors, notices := parser.parse_vet_file(path, mut table, prefs)
 	// Transfer errors from scanner and parser
 	vt.errors << errors
+	vt.notices << notices
 	// Scan each line in file for things to improve
 	source_lines := os.read_lines(vt.file) or { []string{} }
 	for lnumber, line in source_lines {
@@ -135,7 +141,7 @@ fn (mut vt Vet) vet_fn_documentation(lines []string, line string, lnumber int) {
 	if lnumber > 0 {
 		collect_tags := fn (line string) []string {
 			mut cleaned := line.all_before('/')
-			cleaned = cleaned.replace_each(['[', '', ']', '', ' ', ''])
+			cleaned = cleaned.replace_each(clean_seq)
 			return cleaned.split(',')
 		}
 		ident_fn_name := fn (line string) string {
@@ -153,7 +159,8 @@ fn (mut vt Vet) vet_fn_documentation(lines []string, line string, lnumber int) {
 				}
 			}
 			if tokens.len > 0 {
-				return tokens[0].all_before('(')
+				function_name_with_generic_parameters := tokens[0].all_before('(')
+				return function_name_with_generic_parameters.all_before('[')
 			}
 			return ''
 		}
@@ -175,7 +182,7 @@ fn (mut vt Vet) vet_fn_documentation(lines []string, line string, lnumber int) {
 			}
 			if grab {
 				clean_line := line.all_before_last('{').trim(' ')
-				vt.warn('Function documentation seems to be missing for "$clean_line".',
+				vt.warn('Function documentation seems to be missing for "${clean_line}".',
 					lnumber, .doc)
 			}
 		} else {
@@ -187,27 +194,33 @@ fn (mut vt Vet) vet_fn_documentation(lines []string, line string, lnumber int) {
 					prev_prev_line = lines[j - 1]
 				}
 				prev_line := lines[j]
+
+				if prev_line.starts_with('//') {
+					if prev_line.starts_with('// ${fn_name} ') {
+						grab = false
+						break
+					} else if prev_line.starts_with('// ${fn_name}')
+						&& !prev_prev_line.starts_with('//') {
+						grab = false
+						clean_line := line.all_before_last('{').trim(' ')
+						vt.warn('The documentation for "${clean_line}" seems incomplete.',
+							lnumber, .doc)
+						break
+					}
+
+					continue
+				}
+
 				if prev_line.contains('}') { // We've looked back to the above scope, stop here
-					break
-				} else if prev_line.starts_with('// $fn_name ') {
-					grab = false
-					break
-				} else if prev_line.starts_with('// $fn_name') && !prev_prev_line.starts_with('//') {
-					grab = false
-					clean_line := line.all_before_last('{').trim(' ')
-					vt.warn('The documentation for "$clean_line" seems incomplete.', lnumber,
-						.doc)
 					break
 				} else if prev_line.starts_with('[') {
 					tags << collect_tags(prev_line)
-					continue
-				} else if prev_line.starts_with('//') { // Single-line comment
 					continue
 				}
 			}
 			if grab {
 				clean_line := line.all_before_last('{').trim(' ')
-				vt.warn('A function name is missing from the documentation of "$clean_line".',
+				vt.warn('A function name is missing from the documentation of "${clean_line}".',
 					lnumber, .doc)
 			}
 		}
@@ -222,17 +235,18 @@ fn (vt &Vet) vprintln(s string) {
 }
 
 fn (vt &Vet) e2string(err vet.Error) string {
-	mut kind := '$err.kind:'
-	mut location := '$err.file_path:$err.pos.line_nr:'
+	mut kind := '${err.kind}:'
+	mut location := '${err.file_path}:${err.pos.line_nr}:'
 	if vt.opt.use_color {
 		kind = match err.kind {
 			.warning { term.magenta(kind) }
 			.error { term.red(kind) }
+			.notice { term.yellow(kind) }
 		}
 		kind = term.bold(kind)
 		location = term.bold(location)
 	}
-	return '$location $kind $err.message'
+	return '${location} ${kind} ${err.message}'
 }
 
 fn (mut vt Vet) error(msg string, line int, fix vet.FixKind) {
@@ -266,5 +280,19 @@ fn (mut vt Vet) warn(msg string, line int, fix vet.FixKind) {
 		vt.errors << w
 	} else {
 		vt.warns << w
+	}
+}
+
+fn (mut vt Vet) notice(msg string, line int, fix vet.FixKind) {
+	pos := token.Pos{
+		line_nr: line + 1
+	}
+	vt.notices << vet.Error{
+		message: msg
+		file_path: vt.file
+		pos: pos
+		kind: .notice
+		fix: fix
+		typ: .default
 	}
 }

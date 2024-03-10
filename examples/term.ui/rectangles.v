@@ -12,7 +12,7 @@ mut:
 
 struct App {
 mut:
-	tui      &tui.Context = unsafe { 0 }
+	tui      &tui.Context = unsafe { nil }
 	rects    []Rect
 	cur_rect Rect
 	is_drag  bool
@@ -27,8 +27,7 @@ fn random_color() tui.Color {
 	}
 }
 
-fn event(e &tui.Event, x voidptr) {
-	mut app := &App(x)
+fn event(e &tui.Event, mut app App) {
 	match e.typ {
 		.mouse_down {
 			app.is_drag = true
@@ -60,8 +59,7 @@ fn event(e &tui.Event, x voidptr) {
 	app.redraw = true
 }
 
-fn frame(x voidptr) {
-	mut app := &App(x)
+fn frame(mut app App) {
 	if !app.redraw {
 		return
 	}
@@ -84,14 +82,18 @@ fn frame(x voidptr) {
 	app.redraw = false
 }
 
+type EventFn = fn (&tui.Event, voidptr)
+
+type FrameFn = fn (voidptr)
+
 fn main() {
 	mut app := &App{}
 	app.tui = tui.init(
 		user_data: app
-		event_fn: event
-		frame_fn: frame
+		event_fn: EventFn(event)
+		frame_fn: FrameFn(frame)
 		hide_cursor: true
 		frame_rate: 60
 	)
-	app.tui.run()?
+	app.tui.run()!
 }

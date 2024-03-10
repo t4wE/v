@@ -4,9 +4,9 @@ import v.parser
 import v.pref
 
 fn parse_text(text string) &ast.File {
-	tbl := ast.new_table()
+	mut tbl := ast.new_table()
 	prefs := pref.new_preferences()
-	return parser.parse_text(text, '', tbl, .skip_comments, prefs)
+	return parser.parse_text(text, '', mut tbl, .skip_comments, prefs)
 }
 
 struct NodeByOffset {
@@ -15,7 +15,7 @@ mut:
 	node ast.Node
 }
 
-fn (mut n NodeByOffset) visit(node &ast.Node) ? {
+fn (mut n NodeByOffset) visit(node &ast.Node) ! {
 	node_pos := node.pos()
 	if n.pos >= node_pos.pos && n.pos <= node_pos.pos + node_pos.len && node !is ast.File {
 		n.node = node

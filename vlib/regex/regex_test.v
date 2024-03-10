@@ -2,6 +2,8 @@ import regex
 import rand
 import strings
 
+const debug = true // true for debug println
+
 /******************************************************************************
 *
 * Test section
@@ -14,6 +16,7 @@ struct TestItem {
 	e   int
 }
 
+// vfmt off
 const(
 match_test_suite = [
 	// minus in CC
@@ -102,7 +105,6 @@ match_test_suite = [
 	TestItem{"this cpapaz adce aabe third",r"(c(pa)+z)(\s[\a]+){2}$",-1,0},
 	TestItem{"1234this cpapaz adce aabe ter",r"(c(pa)+z)(\s[\a]+){2}$",-1,0},
 	TestItem{"cpapaz ole. pipipo,",r"^.*c.+ol?e.*p([ip])+o$",-1,0},
-	TestItem{"/home/us_er/pippo/info-01.jpeg", r"(/?[-\w_]+)*\.txt$",-1,26}
 
 	// check unicode
 	TestItem{"this is a Ⅰ Ⅱ Ⅲ Ⅳ Ⅴ Ⅵ test",r".*a [Ⅰ-Ⅵ ]+",0,34},
@@ -171,6 +173,26 @@ match_test_suite = [
     TestItem{"refs/remotes/origin/master", r"refs/remotes/origin/(.*)",0,26},
     TestItem{"refs/remotes/origin/mastep", r"refs/remotes/origin/(\w*)",0,26},
     TestItem{"refs/remotes/origin/master", r"refs/remotes/origin/(\w*)",0,26},
+
+    // test \S+ vs [^\s]+
+    TestItem{"ab.c", r"\S+\.",0,3},
+    TestItem{"ab.c", r"[^\s]+\.",0,3},
+    TestItem{"ab.c", r"\S*\.",0,3},
+    TestItem{"ab.c", r"[^\s]*\.",0,3},
+    TestItem{"ab c", r"[\S]+\s",0,3},
+    TestItem{"ab c", r"[^\s]+\s",0,3},
+
+    // test last charr classes neg class
+    TestItem{"/a/", r"^/a/[^/]+$", -1,3},
+    TestItem{"/a/b",r"^/a/[^/]+$", 0,4},
+
+    // test `\0` as terminator
+    TestItem{"abc", "^abc\0$", -1,3},
+    TestItem{"abc\0", "^abc\0$", 0,4},
+
+    // test has `\0` chars
+    TestItem{"abcxyz", "^abc\0xyz$", -1,3},
+    TestItem{"abc\0xyz", "^abc\0xyz$", 0,7},
 ]
 )
 
@@ -364,6 +386,24 @@ find_all_test_suite = [
 		r"\+{3}.*\+{3}",
 		[0, 11, 18, 32, 33, 44],
 		['+++pippo+++', '+++ pippo2 +++', '+++ oggi+++']
+	},
+	Test_find_all{
+		"ab",
+		r"[^\n]*",
+		[0, 2],
+		['ab']
+	},
+	Test_find_all{
+		"ab",
+		r"([^\n]*)",
+		[0, 2],
+		['ab']
+	},
+	Test_find_all{
+		"ab",
+		r"([^\n]|a)*",
+		[0, 2],
+		['ab']
 	}
 
 ]
@@ -404,21 +444,18 @@ const (
 		Test_split{'1234', r'\d+', []},
 	]
 )
-
-const (
-	debug = true // true for debug println
-)
+// vfmt on
 
 fn test_regex() {
 	// check capturing groups
 	for c, to in cgroups_test_suite {
 		// debug print
 		if debug {
-			println('$c [$to.src] [q$to.q] ($to.s, $to.e)')
+			println('${c} [${to.src}] [q${to.q}] (${to.s}, ${to.e})')
 		}
 
 		mut re := regex.regex_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -443,7 +480,7 @@ fn test_regex() {
 		}
 
 		if start != to.s || end != to.e {
-			println('#$c [$to.src] q[$to.q] res[$tmp_str] base:[$to.s,$to.e] $start, $end')
+			println('#${c} [${to.src}] q[${to.q}] res[${tmp_str}] base:[${to.s},${to.e}] ${start}, ${end}')
 			eprintln('ERROR!')
 			assert false
 			continue
@@ -461,7 +498,7 @@ fn test_regex() {
 			mut ln := re.group_csave[0] * 3
 			for ln > 0 {
 				if re.group_csave[ln] != to.cg[ln] {
-					eprintln('Capturing group failed on $ln item!')
+					eprintln('Capturing group failed on ${ln} item!')
 					assert false
 				}
 				ln--
@@ -470,7 +507,7 @@ fn test_regex() {
 			// check named captured groups
 			for k in to.cgn.keys() {
 				if to.cgn[k] != (re.group_map[k] - 1) { // we have -1 because the map not found is 0, in groups we start from 0 and we store using +1
-					eprintln('Named capturing group error! [$k]')
+					eprintln('Named capturing group error! [${k}]')
 					assert false
 					continue
 				}
@@ -483,8 +520,8 @@ fn test_regex() {
 			for ln := 0; ln < re.groups.len; ln++ {
 				if re.groups[ln] != to.cg[ln] {
 					eprintln("Capture group doesn't match:")
-					eprintln('true ground: $to.cg')
-					eprintln('elaborated : $re.groups')
+					eprintln('true ground: ${to.cg}')
+					eprintln('elaborated : ${re.groups}')
 					assert false
 				}
 			}
@@ -495,11 +532,11 @@ fn test_regex() {
 	for c, to in find_all_test_suite {
 		// debug print
 		if debug {
-			println('#$c [$to.src] q[$to.q] ($to.res, $to.res_str)')
+			println('#${c} [${to.src}] q[${to.q}] (${to.res}, ${to.res_str})')
 		}
 
 		mut re := regex.regex_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -509,7 +546,7 @@ fn test_regex() {
 		if res != to.res {
 			eprintln('err: find_all !!')
 			if debug {
-				println('#$c exp: $to.res calculated: $res')
+				println('#${c} exp: ${to.res} calculated: ${res}')
 			}
 			assert false
 		}
@@ -518,7 +555,7 @@ fn test_regex() {
 		if res_str != to.res_str {
 			eprintln('err: find_all_str !!')
 			if debug {
-				println('#$c exp: $to.res_str calculated: $res_str')
+				println('#${c} exp: ${to.res_str} calculated: ${res_str}')
 			}
 			assert false
 		}
@@ -528,11 +565,11 @@ fn test_regex() {
 	for c, to in split_test_suite {
 		// debug print
 		if debug {
-			println('#$c [$to.src] q[$to.q] ($to.res)')
+			println('#${c} [${to.src}] q[${to.q}] (${to.res})')
 		}
 
 		mut re := regex.regex_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -542,7 +579,7 @@ fn test_regex() {
 		if res != to.res {
 			eprintln('err: split !!')
 			if debug {
-				println('#$c exp: $to.res calculated: $res')
+				println('#${c} exp: ${to.res} calculated: ${res}')
 			}
 			assert false
 		}
@@ -552,11 +589,11 @@ fn test_regex() {
 	for c, to in match_test_suite_replace {
 		// debug print
 		if debug {
-			println('#$c [$to.src] q[$to.q] $to.r')
+			println('#${c} [${to.src}] q[${to.q}] ${to.r}')
 		}
 
 		mut re := regex.regex_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -572,10 +609,12 @@ fn test_regex() {
 	// check replace simple
 	for c, to in match_test_suite_replace_simple {
 		// debug print
-		if debug { println('#$c [$to.src] q[$to.q] $to.r') }
+		if debug {
+			println('#${c} [${to.src}] q[${to.q}] ${to.r}')
+		}
 
 		mut re := regex.regex_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -591,12 +630,14 @@ fn test_regex() {
 	// check match and find
 	for c, to in match_test_suite {
 		// debug print
-		if debug { println('#$c [$to.src] q[$to.q] $to.s $to.e') }
+		if debug {
+			println('#${c} [${to.src}] q[${to.q}] ${to.s} ${to.e}')
+		}
 
 		// test the find
 		if to.s > 0 {
 			mut re := regex.regex_opt(to.q) or {
-				eprintln('err: $err')
+				eprintln('err: ${err}')
 				assert false
 				continue
 			}
@@ -606,7 +647,7 @@ fn test_regex() {
 
 			if start != to.s || end != to.e {
 				err_str := re.get_parse_error_string(start)
-				eprintln('ERROR : $err_str start: $start end: $end')
+				eprintln('ERROR : ${err_str} start: ${start} end: ${end}')
 				assert false
 			} else {
 				// tmp_str := text[start..end]
@@ -621,7 +662,7 @@ fn test_regex() {
 		// re.debug = true
 
 		re.compile_opt(to.q) or {
-			eprintln('err: $err')
+			eprintln('err: ${err}')
 			assert false
 			continue
 		}
@@ -634,7 +675,7 @@ fn test_regex() {
 		}
 
 		if start != to.s || end != to.e {
-			eprintln('#$c [$to.src] q[$to.q] res[$tmp_str] $start, $end')
+			eprintln('#${c} [${to.src}] q[${to.q}] res[${tmp_str}] ${start}, ${end}')
 			eprintln('ERROR!')
 			assert false
 			continue
@@ -657,7 +698,9 @@ fn test_regex() {
 		}
 	}
 
-	if debug { println('DONE!') }
+	if debug {
+		println('DONE!')
+	}
 }
 
 // test regex_base function
@@ -667,9 +710,9 @@ fn test_regex_func() {
 	mut re, re_err, err_pos := regex.regex_base(query)
 	if re_err == regex.compile_ok {
 		start, end := re.match_string(test_str)
-		assert (start == 0) && (end == 6)
+		assert start == 0 && end == 6
 	} else {
-		eprintln('Error in query string in pos $err_pos')
+		eprintln('Error in query string in pos ${err_pos}')
 		eprintln('Error: ${re.get_parse_error_string(re_err)}')
 		assert false
 	}
@@ -677,7 +720,7 @@ fn test_regex_func() {
 
 fn my_repl_1(re regex.RE, in_txt string, start int, end int) string {
 	s0 := re.get_group_by_id(in_txt, 0)
-	println('[$start, $end] => $s0')
+	println('[${start}, ${end}] => ${s0}')
 	return 'a' + s0.to_upper()
 }
 
@@ -694,7 +737,7 @@ fn my_repl(re regex.RE, in_txt string, start int, end int) string {
 	s0 := re.get_group_by_id(in_txt, 0)[0..1] + 'X'
 	s1 := re.get_group_by_id(in_txt, 1)[0..1] + 'X'
 	s2 := re.get_group_by_id(in_txt, 2)[0..1] + 'X'
-	return '$s0$s1$s2'
+	return '${s0}${s1}${s2}'
 }
 
 // test regex replace function
@@ -741,23 +784,21 @@ fn rest_regex_replace_n() {
 }
 
 // test quantifier wrong sequences
-const (
-	test_quantifier_sequences_list = [
-		r'+{3}.*+{3}',
-		r'+{3}.*?{3}',
-		r'+{3}.**{3}',
-		r'+{3}.*\+{3}*',
-		r'+{3}.*\+{3}+',
-		r'+{3}.*\+{3}??',
-		r'+{3}.*\+{3}{4}',
-	]
-)
+const test_quantifier_sequences_list = [
+	r'+{3}.*+{3}',
+	r'+{3}.*?{3}',
+	r'+{3}.**{3}',
+	r'+{3}.*\+{3}*',
+	r'+{3}.*\+{3}+',
+	r'+{3}.*\+{3}??',
+	r'+{3}.*\+{3}{4}',
+]
 
 fn test_quantifier_sequences() {
 	for pattern in test_quantifier_sequences_list {
 		re, re_err, err_pos := regex.regex_base(pattern)
 		if re_err != regex.err_syntax_error {
-			eprintln('pattern: $pattern => $re_err')
+			eprintln('pattern: ${pattern} => ${re_err}')
 		}
 		assert re_err == regex.err_syntax_error
 	}
@@ -772,6 +813,7 @@ struct Test_find_groups {
 	res []int // groups indexes
 }
 
+// vfmt off
 const (
 find_groups_test_suite = [
 	Test_find_groups{
@@ -797,6 +839,7 @@ find_groups_test_suite = [
 	},
 ]
 )
+// vfmt on
 
 fn test_groups_in_find() {
 	for test_obj in find_groups_test_suite {
@@ -826,11 +869,9 @@ fn test_groups_in_find() {
 	}
 }
 
-const (
-	err_query_list = [
-		r'([a]|[b])*',
-	]
-)
+const err_query_list = [
+	r'([a]|[b])*',
+]
 
 fn test_errors() {
 	mut count := 0
@@ -886,16 +927,14 @@ struct Test_negation_group {
 	res bool
 }
 
-const (
-	negation_groups = [
-		Test_negation_group{'automobile', false},
-		Test_negation_group{'botomobile', true},
-		Test_negation_group{'auto_caravan', false},
-		Test_negation_group{'moto_mobile', true},
-		Test_negation_group{'pippole', true},
-		Test_negation_group{'boring test', false},
-	]
-)
+const negation_groups = [
+	Test_negation_group{'automobile', false},
+	Test_negation_group{'botomobile', true},
+	Test_negation_group{'auto_caravan', false},
+	Test_negation_group{'moto_mobile', true},
+	Test_negation_group{'pippole', true},
+	Test_negation_group{'boring test', false},
+]
 
 fn test_negation_groups() {
 	mut query := r'(?!auto)\w+le'

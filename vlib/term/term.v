@@ -3,10 +3,8 @@ module term
 import os
 import strings.textscanner
 
-const (
-	default_columns_size = 80
-	default_rows_size    = 25
-)
+const default_columns_size = 80
+const default_rows_size = 25
 
 // Coord - used by term.get_cursor_position and term.set_cursor_position
 pub struct Coord {
@@ -40,7 +38,7 @@ pub fn failed(s string) string {
 // If colors are not allowed, returns a given string.
 pub fn ok_message(s string) string {
 	if can_show_color_on_stdout() {
-		return green(' $s ')
+		return green(' ${s} ')
 	}
 	return s
 }
@@ -48,14 +46,14 @@ pub fn ok_message(s string) string {
 // fail_message returns a colored string with red color.
 // If colors are not allowed, returns a given string.
 pub fn fail_message(s string) string {
-	return failed(' $s ')
+	return failed(' ${s} ')
 }
 
 // warn_message returns a colored string with yellow color.
 // If colors are not allowed, returns a given string.
 pub fn warn_message(s string) string {
 	if can_show_color_on_stdout() {
-		return bright_yellow(' $s ')
+		return bright_yellow(' ${s} ')
 	}
 	return s
 }
@@ -148,7 +146,7 @@ pub fn header_left(text string, divider string) string {
 	hstart := relement.repeat(4)[0..4]
 	remaining_cols := imax(0, (cols - (hstart.len + 1 + plain_text.len + 1)))
 	hend := relement.repeat((remaining_cols + 1) / relement.len)[0..remaining_cols]
-	return '$hstart $text $hend'
+	return '${hstart} ${text} ${hend}'
 }
 
 // header returns a horizontal divider line with a centered text in the middle.
@@ -165,8 +163,8 @@ pub fn header(text string, divider string) string {
 	} else {
 		cols - 3 - 2 * divider.len
 	})
-	tlimit_alligned := if (tlimit % 2) != (cols % 2) { tlimit + 1 } else { tlimit }
-	tstart := imax(0, (cols - tlimit_alligned) / 2)
+	tlimit_aligned := if (tlimit % 2) != (cols % 2) { tlimit + 1 } else { tlimit }
+	tstart := imax(0, (cols - tlimit_aligned) / 2)
 	mut ln := ''
 	if divider.len > 0 {
 		ln = divider.repeat(1 + cols / divider.len)[0..cols]
@@ -183,7 +181,7 @@ fn imax(x int, y int) int {
 	return if x > y { x } else { y }
 }
 
-[manualfree]
+@[manualfree]
 fn supports_escape_sequences(fd int) bool {
 	vcolors_override := os.getenv('VCOLORS')
 	defer {

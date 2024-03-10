@@ -2,12 +2,12 @@ module builtin
 
 import dlmalloc
 
-fn mm_alloc(size u64) (&byte, Errno) {
+fn mm_alloc(size u64) (&u8, Errno) {
 	// BEGIN CONSTS
 	// the constants need to be here, since the initialization of other constants,
 	// which happen before these ones would, require malloc
-	mem_prot := MemProt(int(MemProt.prot_read) | int(MemProt.prot_write))
-	map_flags := MapFlags(int(MapFlags.map_private) | int(MapFlags.map_anonymous))
+	mem_prot := unsafe { MemProt(int(MemProt.prot_read) | int(MemProt.prot_write)) }
+	map_flags := unsafe { MapFlags(int(MapFlags.map_private) | int(MapFlags.map_anonymous)) }
 	// END CONSTS
 
 	a, e := sys_mmap(&u8(0), size + sizeof(u64), mem_prot, map_flags, -1, 0)
@@ -34,8 +34,8 @@ fn system_alloc(_ voidptr, size usize) (voidptr, usize, u32) {
 	// BEGIN CONSTS
 	// the constants need to be here, since the initialization of other constants,
 	// which happen before these ones would, require malloc
-	mem_prot := MemProt(int(MemProt.prot_read) | int(MemProt.prot_write))
-	map_flags := MapFlags(int(MapFlags.map_private) | int(MapFlags.map_anonymous))
+	mem_prot := unsafe { MemProt(int(MemProt.prot_read) | int(MemProt.prot_write)) }
+	map_flags := unsafe { MapFlags(int(MapFlags.map_private) | int(MapFlags.map_anonymous)) }
 	// END CONSTS
 
 	a, e := sys_mmap(&u8(0), u64(size), mem_prot, map_flags, -1, 0)

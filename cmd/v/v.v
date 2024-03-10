@@ -1,57 +1,57 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module main
 
-import help
 import os
 import term
+import v.help
 import v.pref
 import v.util
 import v.util.version
 import v.builder
 import v.builder.cbuilder
 
-const (
-	external_tools                      = [
-		'ast',
-		'bin2v',
-		'bug',
-		'build-examples',
-		'build-tools',
-		'build-vbinaries',
-		'bump',
-		'check-md',
-		'complete',
-		'compress',
-		'doc',
-		'doctor',
-		'fmt',
-		'gret',
-		'ls',
-		'missdoc',
-		'repl',
-		'self',
-		'setup-freetype',
-		'shader',
-		'should-compile-all',
-		'symlink',
-		'scan',
-		'test',
-		'test-all', // runs most of the tests and other checking tools, that will be run by the CI
-		'test-cleancode',
-		'test-fmt',
-		'test-parser',
-		'test-self',
-		'tracev',
-		'up',
-		'vet',
-		'wipe-cache',
-		'watch',
-		'where',
-	]
-	list_of_flags_that_allow_duplicates = ['cc', 'd', 'define', 'cf', 'cflags']
-)
+const external_tools = [
+	'ast',
+	'bin2v',
+	'bug',
+	'build-examples',
+	'build-tools',
+	'build-vbinaries',
+	'bump',
+	'check-md',
+	'complete',
+	'compress',
+	'doc',
+	'doctor',
+	'fmt',
+	'gret',
+	'ls',
+	'missdoc',
+	'repl',
+	'repeat',
+	'self',
+	'setup-freetype',
+	'shader',
+	'share',
+	'should-compile-all',
+	'symlink',
+	'scan',
+	'test',
+	'test-all', // runs most of the tests and other checking tools, that will be run by the CI
+	'test-cleancode',
+	'test-fmt',
+	'test-parser',
+	'test-self',
+	'tracev',
+	'up',
+	'vet',
+	'wipe-cache',
+	'watch',
+	'where',
+]
+const list_of_flags_that_allow_duplicates = ['cc', 'd', 'define', 'cf', 'cflags']
 
 fn main() {
 	mut timers_should_print := false
@@ -67,6 +67,7 @@ fn main() {
 	timers.show('v start')
 	timers.start('parse_CLI_args')
 	args := os.args[1..]
+
 	if args.len == 0 || args[0] in ['-', 'repl'] {
 		if args.len == 0 {
 			// Running `./v` without args launches repl
@@ -149,7 +150,7 @@ fn main() {
 	all_commands << external_tools
 	all_commands << other_commands
 	all_commands.sort()
-	eprintln(util.new_suggestion(command, all_commands).say('v: unknown command `$command`'))
+	eprintln(util.new_suggestion(command, all_commands).say('v: unknown command `${command}`'))
 	eprintln('Run ${term.highlight_command('v help')} for usage.')
 	exit(1)
 }
@@ -189,6 +190,9 @@ fn rebuild(prefs &pref.Preferences) {
 		.golang {
 			println('using Go WIP backend...')
 			util.launch_tool(prefs.is_verbose, 'builders/golang_builder', os.args[1..])
+		}
+		.wasm {
+			util.launch_tool(prefs.is_verbose, 'builders/wasm_builder', os.args[1..])
 		}
 	}
 }

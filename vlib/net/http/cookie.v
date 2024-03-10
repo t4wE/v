@@ -32,34 +32,20 @@ pub mut:
 //
 // See https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00 for details.
 pub enum SameSite {
+	same_site_not_set
 	same_site_default_mode = 1
 	same_site_lax_mode
 	same_site_strict_mode
 	same_site_none_mode
 }
 
-// Parses all "Set-Cookie" values from the header `h` and
-// returns the successfully parsed Cookies.
-pub fn read_set_cookies(h map[string][]string) []&Cookie {
-	cookies_s := h['Set-Cookie']
-	cookie_count := cookies_s.len
-	if cookie_count == 0 {
-		return []
-	}
-	mut cookies := []&Cookie{}
-	for _, line in cookies_s {
-		c := parse_cookie(line) or { continue }
-		cookies << &c
-	}
-	return cookies
-}
-
 // Parses all "Cookie" values from the header `h` and
 // returns the successfully parsed Cookies.
 //
 // if `filter` isn't empty, only cookies of that name are returned
-pub fn read_cookies(h map[string][]string, filter string) []&Cookie {
-	lines := h['Cookie']
+pub fn read_cookies(h Header, filter string) []&Cookie {
+	// lines := h['Cookie']
+	lines := h.values(.cookie) // or {
 	if lines.len == 0 {
 		return []
 	}
@@ -104,7 +90,7 @@ pub fn read_cookies(h map[string][]string, filter string) []&Cookie {
 	return cookies
 }
 
-// Returns the serialization of the cookie for use in a Cookie header
+// str returns the serialization of the cookie for use in a Cookie header
 // (if only Name and Value are set) or a Set-Cookie response
 // header (if other fields are set).
 //
@@ -143,11 +129,11 @@ pub fn (c &Cookie) str() string {
 	}
 	if c.expires.year > 1600 {
 		e := c.expires
-		time_str := '$e.weekday_str(), $e.day.str() $e.smonth() $e.year $e.hhmmss() GMT'
+		time_str := '${e.weekday_str()}, ${e.day.str()} ${e.smonth()} ${e.year} ${e.hhmmss()} GMT'
 		b.write_string('; expires=')
 		b.write_string(time_str)
 	}
-	// TODO: Fix this. Techically a max age of 0 or less should be 0
+	// TODO: Fix this. Technically a max age of 0 or less should be 0
 	// We need a way to not have a max age.
 	if c.max_age > 0 {
 		b.write_string('; Max-Age=')
@@ -162,6 +148,7 @@ pub fn (c &Cookie) str() string {
 		b.write_string('; Secure')
 	}
 	match c.same_site {
+		.same_site_not_set {}
 		.same_site_default_mode {
 			b.write_string('; SameSite')
 		}
@@ -214,7 +201,7 @@ pub fn sanitize_cookie_value(v string) string {
 	}
 	// Check for the existence of a space or comma
 	if val.starts_with(' ') || val.ends_with(' ') || val.starts_with(',') || val.ends_with(',') {
-		return '"$v"'
+		return '"${v}"'
 	}
 	return v
 }
@@ -294,7 +281,7 @@ pub fn is_cookie_domain_name(_s string) bool {
 	return ok
 }
 
-fn parse_cookie_value(_raw string, allow_double_quote bool) ?string {
+fn parse_cookie_value(_raw string, allow_double_quote bool) !string {
 	mut raw := _raw
 	// Strip the quotes, if present
 	if allow_double_quote && raw.len > 1 && raw[0] == `"` && raw[raw.len - 1] == `"` {
@@ -320,7 +307,7 @@ fn is_cookie_name_valid(name string) bool {
 	return true
 }
 
-fn parse_cookie(line string) ?Cookie {
+fn parse_cookie(line string) !Cookie {
 	mut parts := line.trim_space().split(';')
 	if parts.len == 1 && parts[0] == '' {
 		return error('malformed cookie')

@@ -11,11 +11,11 @@ import v.util
 // should be compiled (v folder).
 // To implement that, these folders are initially skipped, then added
 // as a whole *after the testing.prepare_test_session call*.
-const tools_in_subfolders = ['vdoc', 'vvet', 'vast', 'vwhere']
+const tools_in_subfolders = ['vast', 'vcreate', 'vdoc', 'vpm', 'vvet', 'vwhere']
 
 // non_packaged_tools are tools that should not be packaged with
 // prebuild versions of V, to keep the size smaller.
-// They are mainly usefull for the V project itself, not to end users.
+// They are mainly useful for the V project itself, not to end users.
 const non_packaged_tools = ['gen1m', 'gen_vc', 'fast', 'wyhash']
 
 fn main() {
@@ -23,11 +23,11 @@ fn main() {
 	args_string := os.args[1..].join(' ')
 	vexe := os.getenv('VEXE')
 	vroot := os.dir(vexe)
-	os.chdir(vroot)?
+	os.chdir(vroot)!
 	folder := os.join_path('cmd', 'tools')
 	tfolder := os.join_path(vroot, 'cmd', 'tools')
-	main_label := 'Building $folder ...'
-	finish_label := 'building $folder'
+	main_label := 'Building ${folder} ...'
+	finish_label := 'building ${folder}'
 	//
 	mut skips := []string{}
 	for stool in tools_in_subfolders {
@@ -36,6 +36,7 @@ fn main() {
 	buildopts := args_string.all_before('build-tools')
 	mut session := testing.prepare_test_session(buildopts, folder, skips, main_label)
 	session.rm_binaries = false
+	session.build_tools = true
 	for stool in tools_in_subfolders {
 		session.add(os.join_path(tfolder, stool))
 	}
@@ -47,7 +48,7 @@ fn main() {
 		exit(1)
 	}
 	//
-	mut executables := os.ls(session.vtmp_dir)?
+	mut executables := os.ls(session.vtmp_dir)!
 	executables.sort()
 	for texe in executables {
 		tname := texe.replace(os.file_ext(texe), '')
@@ -64,11 +65,14 @@ fn main() {
 			os.mv_by_cp(tpath, os.join_path(tfolder, tname, texe)) or { panic(err) }
 			continue
 		}
+		if os.is_dir(tpath) {
+			continue
+		}
 		target_path := os.join_path(tfolder, texe)
 		os.mv_by_cp(tpath, target_path) or {
 			emsg := err.msg()
 			if !emsg.contains('vbuild-tools') && !emsg.contains('vtest-all') {
-				eprintln('error while moving $tpath to $target_path: $emsg')
+				eprintln('error while moving ${tpath} to ${target_path}: ${emsg}')
 			}
 			continue
 		}

@@ -1,15 +1,15 @@
-interface Output<T> {
+interface Output[T] {
   val T
   name string
 }
 
 struct Coil {
   pub mut: val int
-  pub: name string [required]
+  pub: name string @[required]
 }
 struct Light {
   pub mut: val int
-  pub: name string [required]
+  pub: name string @[required]
 }
 
 fn main() {

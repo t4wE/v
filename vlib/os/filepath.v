@@ -7,16 +7,14 @@ import strings.textscanner
 // The following functions handle paths depending on the operating system,
 // therefore results may be different for certain operating systems.
 
-const (
-	fslash     = `/`
-	bslash     = `\\`
-	dot        = `.`
-	qmark      = `?`
-	fslash_str = '/'
-	dot_dot    = '..'
-	empty_str  = ''
-	dot_str    = '.'
-)
+const fslash = `/`
+const bslash = `\\`
+const dot = `.`
+const qmark = `?`
+const fslash_str = '/'
+const dot_dot = '..'
+const empty_str = ''
+const dot_str = '.'
 
 // is_abs_path returns `true` if the given `path` is absolute.
 pub fn is_abs_path(path string) bool {
@@ -57,7 +55,7 @@ pub fn abs_path(path string) string {
 // - references to current directories (.)
 // - redundant path separators
 // - the last path separator
-[direct_array_access]
+@[direct_array_access]
 pub fn norm_path(path string) string {
 	if path.len == 0 {
 		return os.dot_str
@@ -131,7 +129,7 @@ pub fn norm_path(path string) string {
 
 // existing_path returns the existing part of the given `path`.
 // An error is returned if there is no existing part of the given `path`.
-pub fn existing_path(path string) ?string {
+pub fn existing_path(path string) !string {
 	err := error('path does not exist')
 	if path.len == 0 {
 		return err
@@ -203,7 +201,7 @@ fn clean_path(path string) string {
 			}
 			continue
 		}
-		// turn foward slash into a back slash on a Windows system
+		// turn forward slash into a back slash on a Windows system
 		$if windows {
 			if curr == os.fslash {
 				sb.write_u8(os.bslash)
@@ -218,6 +216,24 @@ fn clean_path(path string) string {
 		return res[..res.len - 1]
 	}
 	return res
+}
+
+// to_slash returns the result of replacing each separator character
+// in path with a slash (`/`).
+pub fn to_slash(path string) string {
+	if path_separator == '/' {
+		return path
+	}
+	return path.replace(path_separator, '/')
+}
+
+// from_slash returns the result of replacing each slash (`/`) character
+// is path with a separator character.
+pub fn from_slash(path string) string {
+	if path_separator == '/' {
+		return path
+	}
+	return path.replace('/', path_separator)
 }
 
 // win_volume_len returns the length of the

@@ -17,11 +17,9 @@ fn f(shared x St, shared z St) {
 	}
 }
 
-const (
-	reads_per_thread = 30
-	read_threads     = 10
-	writes           = 5
-)
+const reads_per_thread = 30
+const read_threads = 10
+const writes = 5
 
 fn test_shared_lock() {
 	// object with separate read/write lock
@@ -32,7 +30,7 @@ fn test_shared_lock() {
 		a: read_threads
 	}
 	for _ in 0 .. read_threads {
-		go f(shared x, shared z)
+		spawn f(shared x, shared z)
 	}
 	for i in 0 .. writes {
 		lock x { // wait for ongoing reads to finish, don't start new ones

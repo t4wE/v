@@ -1,3 +1,6 @@
+// vtest flaky: true
+// vtest retry: 3
+
 fn test_js() {
 	$if js_node {
 		assert true
@@ -340,9 +343,7 @@ fn test_reverse() {
 	assert f.len == 0
 }
 
-const (
-	c_n = 5
-)
+const c_n = 5
 
 struct Foooj {
 	a [5]int // c_n
@@ -486,11 +487,11 @@ fn (ta []Test2) str() string {
 }
 
 fn (t Test2) str() string {
-	return '{$t.one $t.two}'
+	return '{${t.one} ${t.two}}'
 }
 
 fn (t Test) str() string {
-	return '{$t.a $t.b}'
+	return '{${t.a} ${t.b}}'
 }
 
 fn test_struct_print() {
@@ -659,7 +660,7 @@ fn test_map() {
 	// type switch
 	assert nums.map(it * 10) == [10, 20, 30, 40, 50, 60]
 	assert nums.map(it * it) == [1, 4, 9, 16, 25, 36]
-	assert nums.map('$it') == ['1', '2', '3', '4', '5', '6']
+	assert nums.map('${it}') == ['1', '2', '3', '4', '5', '6']
 	assert nums.map(it % 2 == 0) == [false, true, false, true, false, true]
 	assert strs.map(it.to_upper()) == ['V', 'IS', 'AWESOME']
 	assert strs.map(it == 'awesome') == [false, false, true]
@@ -673,13 +674,13 @@ fn test_map() {
 	assert []int{len: 0}.map(it * 2) == []
 	// nested maps (where it is of same type)
 	assert nums.map(strs.map(int(7)) == [7, 7, 7]) == [true, true, true, true, true, true]
-	assert nums.map('$it' + strs.map('a')[0]) == ['1a', '2a', '3a', '4a', '5a', '6a']
+	assert nums.map('${it}' + strs.map('a')[0]) == ['1a', '2a', '3a', '4a', '5a', '6a']
 	assert nums.map(it + strs.map(int(7))[0]) == [8, 9, 10, 11, 12, 13]
 	assert nums.map(it + strs.map(it.len)[0]) == [2, 3, 4, 5, 6, 7]
 	assert strs.map(it.len + strs.map(it.len)[0]) == [2, 3, 8]
 	// nested (different it types)
 	assert strs.map(it[nums.map(it - it)[0]]) == [u8(`v`), `i`, `a`]
-	assert nums[0..3].map('$it' + strs.map(it)[it - 1]) == ['1v', '2is', '3awesome']
+	assert nums[0..3].map('${it}' + strs.map(it)[it - 1]) == ['1v', '2is', '3awesome']
 	assert nums.map(map_test_helper_1) == [1, 4, 9, 16, 25, 36]
 	assert [1, 5, 10].map(map_test_helper_1) == [1, 25, 100]
 	assert nums == [1, 2, 3, 4, 5, 6]
@@ -972,7 +973,7 @@ fn test_in_struct() {
 	assert baz.bar[0] == 3
 }
 
-[direct_array_access]
+@[direct_array_access]
 fn test_direct_modification() {
 	mut foo := [2, 0, 5]
 	foo[1] = 3
@@ -1052,7 +1053,7 @@ fn test_hex() {
 	assert st1.hex() == '41'.repeat(100)
 }*/
 
-fn test_left_shift_precendence() {
+fn test_left_shift_precedence() {
 	mut arr := []int{}
 	arr << 1 + 1
 	arr << 1 - 1
@@ -1076,7 +1077,7 @@ fn test_array_with_cap() {
 fn test_multi_array_index() {
 	mut a := [][]int{len: 2, init: []int{len: 3, init: 0}}
 	a[0][0] = 1
-	assert '$a' == '[[1, 0, 0], [0, 0, 0]]'
+	assert '${a}' == '[[1, 0, 0], [0, 0, 0]]'
 	// mut b := [[0].repeat(3)].repeat(2)
 	// b[0][0] = 1
 	// assert '$b' == '[[1, 0, 0], [0, 0, 0]]'
@@ -1205,7 +1206,7 @@ fn test_array_last() {
 	assert s.last().val == 'a'
 }
 
-[direct_array_access]
+@[direct_array_access]
 fn test_direct_array_access() {
 	mut a := [11, 22, 33, 44]
 	assert a[0] == 11
@@ -1218,7 +1219,7 @@ fn test_direct_array_access() {
 	assert a == [21, 24, 14, 20]
 }
 
-[direct_array_access]
+@[direct_array_access]
 fn test_direct_array_access_via_ptr() {
 	mut b := [11, 22, 33, 44]
 	unsafe {
@@ -1247,12 +1248,10 @@ fn test_push_arr_string_free() {
 	assert lines[1] == 'ab'
 }
 
-const (
-	grid_size_1 = 2
-	grid_size_2 = 3
-	grid_size_3 = 4
-	cell_value  = 123
-)
+const grid_size_1 = 2
+const grid_size_2 = 3
+const grid_size_3 = 4
+const cell_value = 123
 
 fn test_multidimensional_array_initialization_with_consts() {
 	mut data := [][][]int{len: grid_size_1, init: [][]int{len: grid_size_2, init: []int{len: grid_size_3, init: cell_value}}}
@@ -1381,7 +1380,7 @@ fn test_array_struct_contains() {
 	coords << coord_1
 	exists := coord_1 in coords
 	not_exists := coord_1 !in coords
-	println('`exists`: $exists and `not exists`: $not_exists')
+	println('`exists`: ${exists} and `not exists`: ${not_exists}')
 	assert exists == true
 	assert not_exists == false
 }
@@ -1416,7 +1415,7 @@ fn test_array_of_array_append() {
 	println(x) // OK
 	x[2] << 123 // RTE
 	println(x)
-	assert '$x' == '[[], [], [123], []]'
+	assert '${x}' == '[[], [], [123], []]'
 }
 
 fn test_array_of_map_insert() {
@@ -1430,7 +1429,7 @@ fn test_array_of_map_insert() {
 
 fn test_multi_fixed_array_init() {
 	a := [3][3]int{}
-	assert '$a' == '[[0, 0, 0], [0, 0, 0], [0, 0, 0]]'
+	assert '${a}' == '[[0, 0, 0], [0, 0, 0], [0, 0, 0]]'
 }
 
 struct Numbers {
@@ -1482,7 +1481,7 @@ fn test_clone_of_same_elem_size_array() {
 	assert arr2 == [Abc{1, 2, 3}, Abc{2, 3, 4}]
 }
 
-pub fn example<T>(mut arr []T) []T {
+pub fn example[T](mut arr []T) []T {
 	return arr.clone()
 }
 

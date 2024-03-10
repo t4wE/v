@@ -1,23 +1,26 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module ast
 
-[heap]
+@[heap]
 pub struct Scope {
 pub mut:
 	// mut:
 	objects              map[string]ScopeObject
 	struct_fields        map[string]ScopeStructField
-	parent               &Scope
+	parent               &Scope = unsafe { nil }
 	detached_from_parent bool
 	children             []&Scope
 	start_pos            int
 	end_pos              int
 }
 
-[unsafe]
+@[unsafe]
 pub fn (s &Scope) free() {
+	if s == unsafe { nil } {
+		return
+	}
 	unsafe {
 		s.objects.free()
 		s.struct_fields.free()
@@ -38,10 +41,13 @@ pub fn new_scope(parent &Scope, start_pos int) &Scope {
 */
 
 fn (s &Scope) dont_lookup_parent() bool {
-	return isnil(s.parent) || s.detached_from_parent
+	return s.parent == unsafe { nil } || s.detached_from_parent
 }
 
 pub fn (s &Scope) find(name string) ?ScopeObject {
+	if s == unsafe { nil } {
+		return none
+	}
 	for sc := unsafe { s }; true; sc = sc.parent {
 		if name in sc.objects {
 			return unsafe { sc.objects[name] }
@@ -55,6 +61,9 @@ pub fn (s &Scope) find(name string) ?ScopeObject {
 
 // selector_expr:  name.field_name
 pub fn (s &Scope) find_struct_field(name string, struct_type Type, field_name string) ?ScopeStructField {
+	if s == unsafe { nil } {
+		return none
+	}
 	for sc := unsafe { s }; true; sc = sc.parent {
 		if field := sc.struct_fields[name] {
 			if field.struct_type == struct_type && field.name == field_name {
@@ -122,6 +131,20 @@ pub fn (mut s Scope) update_var_type(name string, typ Type) {
 	}
 }
 
+pub fn (mut s Scope) update_ct_var_kind(name string, kind ComptimeVarKind) {
+	mut obj := unsafe { s.objects[name] }
+	if mut obj is Var {
+		obj.ct_type_var = kind
+	}
+}
+
+pub fn (mut s Scope) update_smartcasts(name string, typ Type) {
+	mut obj := unsafe { s.objects[name] }
+	if mut obj is Var {
+		obj.smartcasts = [typ]
+	}
+}
+
 // selector_expr:  name.field_name
 pub fn (mut s Scope) register_struct_field(name string, field ScopeStructField) {
 	if f := s.struct_fields[name] {
@@ -168,7 +191,24 @@ pub fn (s &Scope) innermost(pos int) &Scope {
 	return s
 }
 
-[inline]
+// get_all_vars extracts all current scope vars
+pub fn (s &Scope) get_all_vars() []ScopeObject {
+	if s == unsafe { nil } {
+		return []
+	}
+	mut scope_vars := []ScopeObject{}
+	for sc := unsafe { s }; true; sc = sc.parent {
+		if sc.objects.len > 0 {
+			scope_vars << sc.objects.values().filter(|it| it is Var)
+		}
+		if sc.dont_lookup_parent() {
+			break
+		}
+	}
+	return scope_vars
+}
+
+@[inline]
 pub fn (s &Scope) contains(pos int) bool {
 	return pos >= s.start_pos && pos <= s.end_pos
 }
@@ -184,22 +224,22 @@ pub fn (s &Scope) has_inherited_vars() bool {
 	return false
 }
 
-pub fn (sc Scope) show(depth int, max_depth int) string {
+pub fn (sc &Scope) show(depth int, max_depth int) string {
 	mut out := ''
 	mut indent := ''
 	for _ in 0 .. depth * 4 {
 		indent += ' '
 	}
-	out += '$indent# $sc.start_pos - $sc.end_pos\n'
+	out += '${indent}# ${sc.start_pos} - ${sc.end_pos}\n'
 	for _, obj in sc.objects {
 		match obj {
-			ConstField { out += '$indent  * const: $obj.name - $obj.typ\n' }
-			Var { out += '$indent  * var: $obj.name - $obj.typ\n' }
+			ConstField { out += '${indent}  * const: ${obj.name} - ${obj.typ}\n' }
+			Var { out += '${indent}  * var: ${obj.name} - ${obj.typ}\n' }
 			else {}
 		}
 	}
 	for _, field in sc.struct_fields {
-		out += '$indent  * struct_field: $field.struct_type $field.name - $field.typ\n'
+		out += '${indent}  * struct_field: ${field.struct_type} ${field.name} - ${field.typ}\n'
 	}
 	if max_depth == 0 || depth < max_depth - 1 {
 		for i, _ in sc.children {
@@ -209,6 +249,6 @@ pub fn (sc Scope) show(depth int, max_depth int) string {
 	return out
 }
 
-pub fn (sc Scope) str() string {
+pub fn (sc &Scope) str() string {
 	return sc.show(0, 0)
 }

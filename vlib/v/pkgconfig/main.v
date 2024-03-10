@@ -5,7 +5,7 @@ import strings
 
 pub struct Main {
 pub mut:
-	opt         &MainOptions
+	opt         &MainOptions = unsafe { nil }
 	res         string
 	has_actions bool
 }
@@ -34,7 +34,7 @@ struct MainOptions {
 	args              []string
 }
 
-fn desc(mod string) ?string {
+fn desc(mod string) !string {
 	options := Options{
 		only_description: true
 	}
@@ -42,7 +42,7 @@ fn desc(mod string) ?string {
 	return pc.description
 }
 
-pub fn main(args []string) ?&Main {
+pub fn main(args []string) !&Main {
 	mut fp := flag.new_flag_parser(args)
 	fp.application('pkgconfig')
 	fp.version(version)
@@ -61,7 +61,7 @@ pub fn main(args []string) ?&Main {
 			for mod in modules {
 				d := desc(mod) or { continue }
 				pad := strings.repeat(` `, 20 - mod.len)
-				m.res += '$mod $pad $d\n'
+				m.res += '${mod} ${pad} ${d}\n'
 			}
 		} else {
 			m.res = modules.join('\n')
@@ -72,13 +72,13 @@ pub fn main(args []string) ?&Main {
 	return m
 }
 
-pub fn (mut m Main) run() ?string {
+pub fn (mut m Main) run() !string {
 	options := Options{
 		debug: m.opt.debug
 	}
 	// m.opt = options
 	opt := m.opt
-	mut pc := &PkgConfig(0)
+	mut pc := &PkgConfig(unsafe { nil })
 	mut res := m.res
 	for arg in opt.args {
 		mut pcdep := load(arg, options) or {
@@ -94,7 +94,7 @@ pub fn (mut m Main) run() ?string {
 			res += pcdep.description
 		}
 		if unsafe { pc != 0 } {
-			pc.extend(pcdep)?
+			pc.extend(pcdep)!
 		} else {
 			pc = pcdep
 		}
@@ -163,13 +163,13 @@ fn filter(libs []string, prefix string, prefix2 string) string {
 	if prefix2 != '' {
 		for lib in libs {
 			if !lib.starts_with(prefix) && !lib.starts_with(prefix2) {
-				res += ' $lib'
+				res += ' ${lib}'
 			}
 		}
 	} else {
 		for lib in libs {
 			if lib.starts_with(prefix) {
-				res += ' $lib'
+				res += ' ${lib}'
 			}
 		}
 	}

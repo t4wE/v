@@ -1,9 +1,7 @@
 import datatypes
 
-const (
-	w = 64
-	h = 32
-)
+const w = 64
+const h = 32
 
 interface Display {
 mut:
@@ -15,7 +13,7 @@ mut:
 struct Vm {
 mut:
 	display Display
-	stack   datatypes.Stack<u16>
+	stack   datatypes.Stack[u16]
 }
 
 struct Pattern {
@@ -24,7 +22,7 @@ struct Pattern {
 }
 
 fn new_pattern(pattern string, handler fn (mut m Vm)) Pattern {
-	return Pattern{pattern.runes().map(u8('0x$it'.int())), handler}
+	return Pattern{pattern.runes().map(u8('0x${it}'.int())), handler}
 }
 
 fn test_generics_struct_parent_has_str_to_string() {

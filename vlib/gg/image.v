@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license that can be found in the LICENSE file.
 module gg
 
@@ -16,7 +16,14 @@ pub:
 	part_rect Rect // defines the size and position of part of the image to use when rendering
 	rotate    int  // amount to rotate the image in degrees
 	z         f32
-	color     gx.Color = gx.white
+	color     gx.Color    = gx.white
+	effect    ImageEffect = .alpha
+}
+
+pub enum ImageEffect {
+	// TODO(FireRedz): Add more effects
+	alpha
+	add
 }
 
 // Rect represents a rectangular shape in `gg`.

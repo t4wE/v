@@ -1,6 +1,7 @@
 module os
 
-pub fn open_uri(uri string) ? {
+// open_uri opens a given uri.
+pub fn open_uri(uri string) ! {
 	mut vopen_uri_cmd := getenv('VOPEN_URI_CMD')
 	if vopen_uri_cmd == '' {
 		$if macos {
@@ -23,8 +24,8 @@ pub fn open_uri(uri string) ? {
 	if vopen_uri_cmd == '' {
 		return error('unsupported platform')
 	}
-	result := execute('$vopen_uri_cmd "$uri"')
+	result := execute('${vopen_uri_cmd} "${uri}"')
 	if result.exit_code != 0 {
-		return error('unable to open url: $result.output')
+		return error('unable to open url: ${result.output}')
 	}
 }

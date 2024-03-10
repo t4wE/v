@@ -1,19 +1,19 @@
-[heap]
+@[heap]
 struct GitStructure {
 pub mut:
 	root  string
 	repos []&GitRepo
 }
 
-[heap]
+@[heap]
 struct GitRepo {
-	id int [skip]
+	id int @[skip]
 pub:
 	path string // path on filesystem
 	name string
 }
 
-pub fn (mut gitstructure GitStructure) repo_get(name string) ?&GitRepo {
+pub fn (mut gitstructure GitStructure) repo_get(name string) !&GitRepo {
 	for r in gitstructure.repos {
 		if r.name == name {
 			if name != '' {
@@ -22,7 +22,7 @@ pub fn (mut gitstructure GitStructure) repo_get(name string) ?&GitRepo {
 			}
 		}
 	}
-	return error("Could not find repo for account name: '$name'")
+	return error("Could not find repo for account name: '${name}'")
 }
 
 fn test_opt_ref_return() {
@@ -38,14 +38,14 @@ fn test_opt_ref_return() {
 	}
 	mut err_msg := ''
 	a := gitstruct.repo_get('thename') or {
-		err_msg = '$err'
+		err_msg = '${err}'
 		r := &GitRepo{}
 		r
 	}
 	assert a.path == 'testpath'
 	assert err_msg == ''
 	b := gitstruct.repo_get('wrong_name') or {
-		err_msg = '$err'
+		err_msg = '${err}'
 		r := &GitRepo{}
 		r
 	}
@@ -53,14 +53,14 @@ fn test_opt_ref_return() {
 	assert err_msg == "Could not find repo for account name: 'wrong_name'"
 }
 
-[heap]
+@[heap]
 struct GitStructureNoRef {
 pub mut:
 	root  string
 	repos []GitRepo
 }
 
-pub fn (mut gitstructure GitStructureNoRef) repo_get(name string) ?&GitRepo {
+pub fn (mut gitstructure GitStructureNoRef) repo_get(name string) !&GitRepo {
 	for r in gitstructure.repos {
 		if r.name == name {
 			if name != '' {
@@ -69,7 +69,7 @@ pub fn (mut gitstructure GitStructureNoRef) repo_get(name string) ?&GitRepo {
 			}
 		}
 	}
-	return error("Could not find repo for account name: '$name'")
+	return error("Could not find repo for account name: '${name}'")
 }
 
 fn test_opt_return() {
@@ -85,14 +85,14 @@ fn test_opt_return() {
 	}
 	mut err_msg := ''
 	a := gitstruct.repo_get('thename2') or {
-		err_msg = '$err'
+		err_msg = '${err}'
 		r := &GitRepo{}
 		r
 	}
 	assert a.path == 'testpath2'
 	assert err_msg == ''
 	b := gitstruct.repo_get('wrong_name2') or {
-		err_msg = '$err'
+		err_msg = '${err}'
 		r := &GitRepo{}
 		r
 	}

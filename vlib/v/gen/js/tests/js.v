@@ -1,10 +1,8 @@
 import v.gen.js.tests.hello as hl
 import v.gen.js.tests.hello.hello1 as hl1
 
-const (
-	i_am_a_const = 21214
-	super        = 'amazing keyword'
-)
+const i_am_a_const = 21214
+const super = 'amazing keyword'
 
 struct Foo {
 mut:
@@ -36,11 +34,11 @@ fn main() {
 	}
 	ren := int(JS.eval('3'.str))
 	if ren != 0 {
-		println('ren=$ren')
+		println('ren=${ren}')
 	}
 	res := string(JS.eval('"3"'.str))
 	if res != '' {
-		println('res=$res')
+		println('res=${res}')
 	}
 	mut a := 1
 	a *= 2
@@ -63,9 +61,9 @@ fn main() {
 	_ = hl.Ccc.a
 	debugger := 'JS keywords'
 	// TODO: Implement interpolation
-	await := '$super: $debugger'
+	await := '${super}: ${debugger}'
 	mut finally := 'implemented'
-	println('$await $finally')
+	println('${await} ${finally}')
 	dun := i_am_a_const * 20 + 2
 	dunn := hl.hello // External constant
 	_ = hl1.nested()
@@ -90,9 +88,9 @@ fn main() {
 	for m, n in ma {
 		iss := m
 	}
-	go async(0, 'hello')
+	spawn async(0, 'hello')
 	fn_in_var := fn (number int) {
-		println('number: $number')
+		println('number: ${number}')
 	}
 	hl.debugger()
 	anon_consumer(hl.excited(), fn (message string) {
@@ -109,7 +107,7 @@ fn anon_consumer(greeting string, anon fn (string)) {
 fn async(num int, def string) {
 }
 
-[deprecated; inline]
+@[deprecated; inline]
 fn hello(game_on int, dummy ...string) (int, int) {
 	defer {
 		do := 'not'
@@ -139,14 +137,14 @@ fn (it Companies) method() int {
 	return 0
 }
 
-fn error_if_even(num int) ?int {
+fn error_if_even(num int) !int {
 	if num % 2 == 0 {
 		return error('number is even')
 	}
 	return num
 }
 
-fn propagation() ? {
+fn propagation() ! {
 	println('Propagation test:')
 	return error('"Task failed successfully" - Windows XP')
 }

@@ -1,14 +1,12 @@
 module filelock
 
-import time
-
 #include <sys/file.h>
 
 fn C.unlink(&char) int
 fn C.open(&char, int, int) int
 fn C.flock(int, int) int
 
-[unsafe]
+@[unsafe]
 pub fn (mut l FileLock) unlink() {
 	if l.fd != -1 {
 		C.close(l.fd)
@@ -17,42 +15,19 @@ pub fn (mut l FileLock) unlink() {
 	C.unlink(&char(l.name.str))
 }
 
-pub fn (mut l FileLock) acquire() ?bool {
+pub fn (mut l FileLock) acquire() ! {
 	if l.fd != -1 {
-		// lock already acquired by this instance
-		return false
+		return error_with_code('lock already acquired by this instance', 1)
 	}
 	fd := open_lockfile(l.name)
 	if fd == -1 {
-		return error('cannot create lock file $l.name')
+		return error_with_code('cannot create lock file ${l.name}', -1)
 	}
 	if C.flock(fd, C.LOCK_EX) == -1 {
 		C.close(fd)
-		return error('cannot lock')
+		return error_with_code('cannot lock', -2)
 	}
 	l.fd = fd
-	return true
-}
-
-pub fn (mut l FileLock) release() bool {
-	if l.fd != -1 {
-		unsafe {
-			l.unlink()
-		}
-		return true
-	}
-	return false
-}
-
-pub fn (mut l FileLock) wait_acquire(s int) ?bool {
-	fin := time.now().add(s)
-	for time.now() < fin {
-		if l.try_acquire() {
-			return true
-		}
-		C.usleep(1000)
-	}
-	return false
 }
 
 fn open_lockfile(f string) int {
@@ -68,7 +43,7 @@ pub fn (mut l FileLock) try_acquire() bool {
 	if l.fd != -1 {
 		return true
 	}
-	fd := open_lockfile('$l.name')
+	fd := open_lockfile('${l.name}')
 	if fd != -1 {
 		err := C.flock(fd, C.LOCK_EX | C.LOCK_NB)
 		if err == -1 {

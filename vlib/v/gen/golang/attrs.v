@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 module golang
@@ -17,11 +17,11 @@ pub fn (mut f Gen) attrs(attrs []ast.Attr) {
 			f.single_line_attrs(sorted_attrs[i..])
 			break
 		}
-		f.writeln('[$attr]')
+		f.writeln('[${attr}]')
 	}
 }
 
-[params]
+@[params]
 pub struct AttrsOptions {
 	inline bool
 }
@@ -40,7 +40,7 @@ pub fn (mut f Gen) single_line_attrs(attrs []ast.Attr, options AttrsOptions) {
 		if i > 0 {
 			f.write('; ')
 		}
-		f.write('$attr')
+		f.write('${attr}')
 	}
 	f.write(']')
 	if !options.inline {
@@ -57,7 +57,7 @@ fn inline_attrs_len(attrs []ast.Attr) int {
 		if i > 0 {
 			n += 2 // '; '.len
 		}
-		n += '$attr'.len
+		n += '${attr}'.len
 	}
 	n++ // ']'.len
 	return n

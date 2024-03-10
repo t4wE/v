@@ -1,6 +1,4 @@
-const (
-	nums = [1, 2, 3]
-)
+const nums = [1, 2, 3]
 
 fn test_for_char_in() {
 	mut sum := 0
@@ -50,7 +48,7 @@ fn test_for_string_in_map() {
 	}
 	mut acc := ''
 	for k, v in m {
-		acc += '$k: $v, '
+		acc += '${k}: ${v}, '
 	}
 	assert acc == 'a: b, c: d, '
 
@@ -62,7 +60,7 @@ fn test_for_string_in_map() {
 	m2.delete('b')
 	acc = ''
 	for k, v in m2 {
-		acc += '$k: $v, '
+		acc += '${k}: ${v}, '
 	}
 	assert acc == 'a: 3, c: 5, '
 }

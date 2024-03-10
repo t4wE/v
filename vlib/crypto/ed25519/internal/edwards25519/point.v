@@ -1,47 +1,45 @@
 module edwards25519
 
-const (
-	// d is a constant in the curve equation.
-	d_bytes   = [u8(0xa3), 0x78, 0x59, 0x13, 0xca, 0x4d, 0xeb, 0x75, 0xab, 0xd8, 0x41, 0x41, 0x4d,
-		0x0a, 0x70, 0x00, 0x98, 0xe8, 0x79, 0x77, 0x79, 0x40, 0xc7, 0x8c, 0x73, 0xfe, 0x6f, 0x2b,
-		0xee, 0x6c, 0x03, 0x52]
-	id_bytes  = [u8(1), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0]
-	gen_bytes = [u8(0x58), 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-		0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-		0x66, 0x66, 0x66, 0x66]
-	d_const   = d_const_generate() or { panic(err) }
-	d2_const  = d2_const_generate() or { panic(err) }
-	// id_point is the point at infinity.
-	id_point  = id_point_generate() or { panic(err) }
-	// generator point
-	gen_point = generator() or { panic(err) }
-)
+// d is a constant in the curve equation.
+const d_bytes = [u8(0xa3), 0x78, 0x59, 0x13, 0xca, 0x4d, 0xeb, 0x75, 0xab, 0xd8, 0x41, 0x41, 0x4d,
+	0x0a, 0x70, 0x00, 0x98, 0xe8, 0x79, 0x77, 0x79, 0x40, 0xc7, 0x8c, 0x73, 0xfe, 0x6f, 0x2b, 0xee,
+	0x6c, 0x03, 0x52]
+const id_bytes = [u8(1), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0]
+const gen_bytes = [u8(0x58), 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+	0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+	0x66, 0x66, 0x66, 0x66]
+const d_const = d_const_generate() or { panic(err) }
+const d2_const = d2_const_generate() or { panic(err) }
+// id_point is the point at infinity.
+const id_point = id_point_generate() or { panic(err) }
+// generator point
+const gen_point = generator() or { panic(err) }
 
-fn d_const_generate() ?Element {
+fn d_const_generate() !Element {
 	mut v := Element{}
-	v.set_bytes(edwards25519.d_bytes)?
+	v.set_bytes(edwards25519.d_bytes)!
 	return v
 }
 
-fn d2_const_generate() ?Element {
+fn d2_const_generate() !Element {
 	mut v := Element{}
 	v.add(edwards25519.d_const, edwards25519.d_const)
 	return v
 }
 
 // id_point_generate is the point at infinity.
-fn id_point_generate() ?Point {
+fn id_point_generate() !Point {
 	mut p := Point{}
-	p.set_bytes(edwards25519.id_bytes)?
+	p.set_bytes(edwards25519.id_bytes)!
 	return p
 }
 
 // generator is the canonical curve basepoint. See TestGenerator for the
 // correspondence of this encoding with the values in RFC 8032.
-fn generator() ?Point {
+fn generator() !Point {
 	mut p := Point{}
-	p.set_bytes(edwards25519.gen_bytes)?
+	p.set_bytes(edwards25519.gen_bytes)!
 	return p
 }
 
@@ -117,7 +115,7 @@ fn (mut v ProjectiveP2) zero() ProjectiveP2 {
 // Note that set_bytes accepts all non-canonical encodings of valid points.
 // That is, it follows decoding rules that match most implementations in
 // the ecosystem rather than RFC 8032.
-pub fn (mut v Point) set_bytes(x []u8) ?Point {
+pub fn (mut v Point) set_bytes(x []u8) !Point {
 	// Specifically, the non-canonical encodings that are accepted are
 	//   1) the ones where the edwards25519 element is not reduced (see the
 	//      (*edwards25519.Element).set_bytes docs) and

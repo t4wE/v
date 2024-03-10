@@ -22,7 +22,7 @@ $ ./an_executable.EXE
 Code based from : Data Structures and Algorithms Made Easy: Data Structures and Algorithmic Puzzles, Fifth Edition (English Edition)
 pseudo code written in C
 This idea is quite different: it uses a priority queue to store the current
-shortest path evaluted
+shortest path evaluated
 The priority queue structure built using a list to simulate
 the queue. A heap is not used in this case.
 */
@@ -36,19 +36,19 @@ mut:
 
 // Function to push according to priority ... the lower priority is goes ahead
 // The "push" always sorted in pq
-fn push_pq<T>(mut prior_queue []T, data int, priority int) {
+fn push_pq[T](mut prior_queue []T, data int, priority int) {
 	mut temp := []T{}
-	lenght_pq := prior_queue.len
+	pq_len := prior_queue.len
 
 	mut i := 0
-	for (i < lenght_pq) && (priority > prior_queue[i].priority) {
+	for i < pq_len && priority > prior_queue[i].priority {
 		temp << prior_queue[i]
 		i++
 	}
 	// INSERTING SORTED in the queue
 	temp << NODE{data, priority} // do the copy in the right place
 	// copy the another part (tail) of original prior_queue
-	for i < lenght_pq {
+	for i < pq_len {
 		temp << prior_queue[i]
 		i++
 	}
@@ -57,26 +57,26 @@ fn push_pq<T>(mut prior_queue []T, data int, priority int) {
 }
 
 // Change the priority of a value/node ... exist a value, change its priority
-fn updating_priority<T>(mut prior_queue []T, search_data int, new_priority int) {
+fn updating_priority[T](mut prior_queue []T, search_data int, new_priority int) {
 	mut i := 0
-	mut lenght_pq := prior_queue.len
+	mut pq_len := prior_queue.len
 
-	for i < lenght_pq {
+	for i < pq_len {
 		if search_data == prior_queue[i].data {
-			prior_queue[i] = NODE{search_data, new_priority} // do the copy in the right place	
+			prior_queue[i] = NODE{search_data, new_priority} // do the copy in the right place
 			break
 		}
 		i++
 		// all the list was examined
-		if i >= lenght_pq {
-			print('\n This data $search_data does exist ... PRIORITY QUEUE problem\n')
+		if i >= pq_len {
+			print('\n This data ${search_data} does exist ... PRIORITY QUEUE problem\n')
 			exit(1) // panic(s string)
 		}
 	} // end for
 }
 
 // a single departure or remove from queue
-fn departure_priority<T>(mut prior_queue []T) int {
+fn departure_priority[T](mut prior_queue []T) int {
 	mut x := prior_queue[0].data
 	prior_queue.delete(0) // or .delete_many(0, 1 )
 	return x
@@ -84,7 +84,7 @@ fn departure_priority<T>(mut prior_queue []T) int {
 
 // give a NODE v, return a list with all adjacents
 // Take care, only positive EDGES
-fn all_adjacents<T>(g [][]T, v int) []int {
+fn all_adjacents[T](g [][]T, v int) []int {
 	mut temp := []int{}
 	for i in 0 .. (g.len) {
 		if g[v][i] > 0 {
@@ -95,19 +95,19 @@ fn all_adjacents<T>(g [][]T, v int) []int {
 }
 
 // print the costs from origin up to all nodes
-fn print_solution<T>(dist []T) {
+fn print_solution[T](dist []T) {
 	print('Vertex \tDistance from Source')
 	for node in 0 .. (dist.len) {
-		print('\n $node ==> \t ${dist[node]}')
+		print('\n ${node} ==> \t ${dist[node]}')
 	}
 }
 
 // print all  paths and their cost or weight
-fn print_paths_dist<T>(path []T, dist []T) {
+fn print_paths_dist[T](path []T, dist []T) {
 	print('\n Read the nodes from right to left (a path): \n')
 
 	for node in 1 .. (path.len) {
-		print('\n $node ')
+		print('\n ${node} ')
 		mut i := node
 		for path[i] != -1 {
 			print(' <= ${path[i]} ')
@@ -125,15 +125,15 @@ fn dijkstra(g [][]int, s int) {
 	push_pq(mut pq_queue, s, 0) // goes s with priority 0
 	mut n := g.len
 
-	mut dist := []int{len: n, init: -1} // dist with -1 instead of INIFINITY
-	mut path := []int{len: n, init: -1} // previous node of each shortest paht
+	mut dist := []int{len: n, init: -1} // dist with -1 instead of INFINITE
+	mut path := []int{len: n, init: -1} // previous node of each shortest path
 
 	// Distance of source vertex from itself is always 0
 	dist[s] = 0
 
 	for pq_queue.len != 0 {
 		mut v := departure_priority(mut pq_queue)
-		// for all W adjcents vertices of v
+		// for all W adjacents vertices of v
 		mut adjs_of_v := all_adjacents(g, v) // all_ADJ of v ....
 		// print('\n ADJ ${v} is ${adjs_of_v}')
 		mut new_dist := 0
@@ -223,15 +223,15 @@ fn main() {
 		[5, 15, 4, 0],
 	]
 
-	// To find number of coluns
+	// To find number of columns
 	// mut cols := an_array[0].len
 	mut graph := [][]int{} // the graph: adjacency matrix
 	// for index, g_value in [graph_01, graph_02, graph_03] {
 	for index, g_value in [graph_01, graph_02, graph_03] {
 		graph = g_value.clone() // graphs_sample[g].clone() // choice your SAMPLE
-		// allways starting by node 0
+		// always starting by node 0
 		start_node := 0
-		println('\n\n Graph ${index + 1} using Dijkstra algorithm (source node: $start_node)')
+		println('\n\n Graph ${index + 1} using Dijkstra algorithm (source node: ${start_node})')
 		dijkstra(graph, start_node)
 	}
 

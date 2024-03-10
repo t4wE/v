@@ -4,7 +4,7 @@ module strconv
 
 f32 to string
 
-Copyright (c) 2019-2022 Dario Deledda. All rights reserved.
+Copyright (c) 2019-2024 Dario Deledda. All rights reserved.
 Use of this source code is governed by an MIT license
 that can be found in the LICENSE file.
 
@@ -21,36 +21,31 @@ https://github.com/cespare/ryu/tree/ba56a33f39e3bbbfa409095d0f9ae168a595feea
 =============================================================================*/
 
 // pow of ten table used by n_digit reduction
-const (
-	ten_pow_table_32 = [
-		u32(1),
-		u32(10),
-		u32(100),
-		u32(1000),
-		u32(10000),
-		u32(100000),
-		u32(1000000),
-		u32(10000000),
-		u32(100000000),
-		u32(1000000000),
-		u32(10000000000),
-		u32(100000000000),
-	]
-)
+const ten_pow_table_32 = [
+	u32(1),
+	u32(10),
+	u32(100),
+	u32(1000),
+	u32(10000),
+	u32(100000),
+	u32(1000000),
+	u32(10000000),
+	u32(100000000),
+	u32(1000000000),
+]!
 
 //=============================================================================
 // Conversion Functions
 //=============================================================================
-const (
-	mantbits32 = u32(23)
-	expbits32  = u32(8)
-	bias32     = 127 // f32 exponent bias
-	maxexp32   = 255
-)
+const mantbits32 = u32(23)
+const expbits32 = u32(8)
+const bias32 = 127 // f32 exponent bias
+
+const maxexp32 = 255
 
 // max 46 char
 // -3.40282346638528859811704183484516925440e+38
-[direct_array_access]
+@[direct_array_access]
 pub fn (d Dec32) get_string_32(neg bool, i_n_digit int, i_pad_digit int) string {
 	n_digit := i_n_digit + 1
 	pad_digit := i_pad_digit + 1
@@ -269,7 +264,7 @@ fn f32_to_decimal(mant u32, exp u32) Dec32 {
 		// General case, which happens rarely (~4.0%).
 		for vp / 10 > vm / 10 {
 			vm_is_trailing_zeros = vm_is_trailing_zeros && (vm % 10) == 0
-			vr_is_trailing_zeros = vr_is_trailing_zeros && (last_removed_digit == 0)
+			vr_is_trailing_zeros = vr_is_trailing_zeros && last_removed_digit == 0
 			last_removed_digit = u8(vr % 10)
 			vr /= 10
 			vp /= 10
@@ -278,7 +273,7 @@ fn f32_to_decimal(mant u32, exp u32) Dec32 {
 		}
 		if vm_is_trailing_zeros {
 			for vm % 10 == 0 {
-				vr_is_trailing_zeros = vr_is_trailing_zeros && (last_removed_digit == 0)
+				vr_is_trailing_zeros = vr_is_trailing_zeros && last_removed_digit == 0
 				last_removed_digit = u8(vr % 10)
 				vr /= 10
 				vp /= 10
@@ -286,7 +281,7 @@ fn f32_to_decimal(mant u32, exp u32) Dec32 {
 				removed++
 			}
 		}
-		if vr_is_trailing_zeros && (last_removed_digit == 5) && (vr % 2) == 0 {
+		if vr_is_trailing_zeros && last_removed_digit == 5 && (vr % 2) == 0 {
 			// Round even if the exact number is .....50..0.
 			last_removed_digit = 4
 		}
@@ -335,7 +330,7 @@ pub fn f32_to_str(f f32, n_digit int) string {
 	// println("${neg} ${mant} e ${exp-bias32}")
 
 	// Exit early for easy cases.
-	if (exp == strconv.maxexp32) || (exp == 0 && mant == 0) {
+	if exp == strconv.maxexp32 || (exp == 0 && mant == 0) {
 		return get_string_special(neg, exp == 0, mant == 0)
 	}
 
@@ -362,7 +357,7 @@ pub fn f32_to_str_pad(f f32, n_digit int) string {
 	// println("${neg} ${mant} e ${exp-bias32}")
 
 	// Exit early for easy cases.
-	if (exp == strconv.maxexp32) || (exp == 0 && mant == 0) {
+	if exp == strconv.maxexp32 || (exp == 0 && mant == 0) {
 		return get_string_special(neg, exp == 0, mant == 0)
 	}
 

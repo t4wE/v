@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Alexander Medvednikov. All rights reserved.
+// Copyright (c) 2019-2024 Alexander Medvednikov. All rights reserved.
 // Use of this source code is governed by an MIT license
 // that can be found in the LICENSE file.
 // Package sha256 implements the SHA224 and SHA256 hash algorithms as defined
@@ -9,34 +9,30 @@ module sha256
 
 import encoding.binary
 
-pub const (
-	// The size of a SHA256 checksum in bytes.
-	size       = 32
-	// The size of a SHA224 checksum in bytes.
-	size224    = 28
-	// The blocksize of SHA256 and SHA224 in bytes.
-	block_size = 64
-)
+// The size of a SHA256 checksum in bytes.
+pub const size = 32
+// The size of a SHA224 checksum in bytes.
+pub const size224 = 28
+// The blocksize of SHA256 and SHA224 in bytes.
+pub const block_size = 64
 
-const (
-	chunk     = 64
-	init0     = 0x6A09E667
-	init1     = 0xBB67AE85
-	init2     = 0x3C6EF372
-	init3     = 0xA54FF53A
-	init4     = 0x510E527F
-	init5     = 0x9B05688C
-	init6     = 0x1F83D9AB
-	init7     = 0x5BE0CD19
-	init0_224 = 0xC1059ED8
-	init1_224 = 0x367CD507
-	init2_224 = 0x3070DD17
-	init3_224 = 0xF70E5939
-	init4_224 = 0xFFC00B31
-	init5_224 = 0x68581511
-	init6_224 = 0x64F98FA7
-	init7_224 = 0xBEFA4FA4
-)
+const chunk = 64
+const init0 = 0x6A09E667
+const init1 = u32(0xBB67AE85)
+const init2 = 0x3C6EF372
+const init3 = u32(0xA54FF53A)
+const init4 = 0x510E527F
+const init5 = u32(0x9B05688C)
+const init6 = 0x1F83D9AB
+const init7 = 0x5BE0CD19
+const init0_224 = u32(0xC1059ED8)
+const init1_224 = 0x367CD507
+const init2_224 = 0x3070DD17
+const init3_224 = u32(0xF70E5939)
+const init4_224 = u32(0xFFC00B31)
+const init5_224 = 0x68581511
+const init6_224 = 0x64F98FA7
+const init7_224 = u32(0xBEFA4FA4)
 
 // digest represents the partial evaluation of a checksum.
 struct Digest {
@@ -48,9 +44,26 @@ mut:
 	is224 bool // mark if this digest is SHA-224
 }
 
-fn (mut d Digest) reset() {
+// free the resources taken by the Digest `d`
+@[unsafe]
+pub fn (mut d Digest) free() {
+	$if prealloc {
+		return
+	}
+	unsafe {
+		d.x.free()
+		d.h.free()
+	}
+}
+
+fn (mut d Digest) init() {
 	d.h = []u32{len: (8)}
 	d.x = []u8{len: sha256.chunk}
+	d.reset()
+}
+
+// reset the state of the Digest `d`
+pub fn (mut d Digest) reset() {
 	if !d.is224 {
 		d.h[0] = u32(sha256.init0)
 		d.h[1] = u32(sha256.init1)
@@ -74,10 +87,18 @@ fn (mut d Digest) reset() {
 	d.len = 0
 }
 
+fn (d &Digest) clone() &Digest {
+	return &Digest{
+		...d
+		h: d.h.clone()
+		x: d.x.clone()
+	}
+}
+
 // new returns a new Digest (implementing hash.Hash) computing the SHA256 checksum.
 pub fn new() &Digest {
 	mut d := &Digest{}
-	d.reset()
+	d.init()
 	return d
 }
 
@@ -85,12 +106,12 @@ pub fn new() &Digest {
 pub fn new224() &Digest {
 	mut d := &Digest{}
 	d.is224 = true
-	d.reset()
+	d.init()
 	return d
 }
 
 // write writes the contents of `p_` to the internal hash representation.
-pub fn (mut d Digest) write(p_ []u8) ?int {
+pub fn (mut d Digest) write(p_ []u8) !int {
 	unsafe {
 		mut p := p_
 		nn := p.len
@@ -127,8 +148,8 @@ pub fn (mut d Digest) write(p_ []u8) ?int {
 // sum returns the SHA256 or SHA224 checksum of digest with the data.
 pub fn (d &Digest) sum(b_in []u8) []u8 {
 	// Make a copy of d so that caller can keep writing and summing.
-	mut d0 := *d
-	hash := d0.checksum()
+	mut d0 := d.clone()
+	hash := d0.checksum_internal()
 	mut b_out := b_in.clone()
 	if d0.is224 {
 		for b in hash[..sha256.size224] {
@@ -142,8 +163,9 @@ pub fn (d &Digest) sum(b_in []u8) []u8 {
 	return b_out
 }
 
-// checksum returns the current byte checksum of the Digest.
-pub fn (mut d Digest) checksum() []u8 {
+// TODO:
+// When the deprecated "checksum()" is finally removed, restore this function name as: "checksum()"
+fn (mut d Digest) checksum_internal() []u8 {
 	mut len := d.len
 	// Padding. Add a 1 bit and 0 bits until 56 bytes mod 64.
 	mut tmp := []u8{len: (64)}
@@ -174,6 +196,20 @@ pub fn (mut d Digest) checksum() []u8 {
 	return digest
 }
 
+// checksum returns the current byte checksum of the Digest,
+// it is an internal method and is not recommended because its results are not idempotent.
+@[deprecated: 'checksum() will be changed to a private method, use sum() instead']
+@[deprecated_after: '2024-04-30']
+pub fn (mut d Digest) checksum() []u8 {
+	out := d.checksum_internal()
+	// if this digest has `size224` length, return the correct `size224` checksum
+	if d.is224 {
+		return out[0..sha256.size224]
+	}
+	// otherwise, returns a normal size
+	return out
+}
+
 // sum returns the SHA256 checksum of the bytes in `data`.
 // Example: assert sha256.sum('V'.bytes()).len > 0 == true
 pub fn sum(data []u8) []u8 {
@@ -184,14 +220,14 @@ pub fn sum(data []u8) []u8 {
 pub fn sum256(data []u8) []u8 {
 	mut d := new()
 	d.write(data) or { panic(err) }
-	return d.checksum()
+	return d.checksum_internal()
 }
 
 // sum224 returns the SHA224 checksum of the data.
 pub fn sum224(data []u8) []u8 {
 	mut d := new224()
 	d.write(data) or { panic(err) }
-	sum := d.checksum()
+	sum := d.checksum_internal()
 	mut sum224 := []u8{len: sha256.size224}
 	copy(mut sum224, sum[..sha256.size224])
 	return sum224

@@ -13,21 +13,9 @@ mut:
 	font_normal  int
 }
 
-[console]
 fn main() {
-	mut color_action := gfx.ColorAttachmentAction{
-		action: .clear
-		value: gfx.Color{
-			r: 0.3
-			g: 0.3
-			b: 0.32
-			a: 1.0
-		}
-	}
-	mut pass_action := gfx.PassAction{}
-	pass_action.colors[0] = color_action
 	state := &AppState{
-		pass_action: pass_action
+		pass_action: gfx.create_clear_pass_action(0.3, 0.3, 0.32, 1.0)
 		font_context: unsafe { nil } // &fontstash.Context(0)
 	}
 	title := 'V Metal/GL Text Rendering'
@@ -51,15 +39,15 @@ fn init(mut state AppState) {
 	if bytes := os.read_bytes(os.resource_abs_path(os.join_path('..', 'assets', 'fonts',
 		'RobotoMono-Regular.ttf')))
 	{
-		println('loaded font: $bytes.len')
+		println('loaded font: ${bytes.len}')
 		state.font_normal = state.font_context.add_font_mem('sans', bytes, false)
 	}
 }
 
-fn frame(user_data voidptr) {
-	mut state := &AppState(user_data)
+fn frame(mut state AppState) {
 	state.render_font()
-	gfx.begin_default_pass(&state.pass_action, sapp.width(), sapp.height())
+	pass := sapp.create_default_pass(state.pass_action)
+	gfx.begin_pass(&pass)
 	sgl.draw()
 	gfx.end_pass()
 	gfx.commit()

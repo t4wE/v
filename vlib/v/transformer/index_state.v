@@ -5,7 +5,7 @@ struct KeyVal {
 	value int
 }
 
-[if debug_bounds_checking ?]
+@[if debug_bounds_checking ?]
 fn debug_bounds_checking(str string) {
 	println(str)
 }
@@ -53,24 +53,24 @@ fn (mut i IndexState) safe_access(key string, new int) bool {
 		return false
 	}
 	old := i.max_index[key] or {
-		debug_bounds_checking('$i.level ${key}.len = $new')
+		debug_bounds_checking('${i.level} ${key}.len = ${new}')
 		i.max_index[key] = new
 		return false
 	}
 	if new > old {
 		if old < -1 {
-			debug_bounds_checking('$i.level $key[$new] unsafe (mut array)')
+			debug_bounds_checking('${i.level} ${key}[${new}] unsafe (mut array)')
 			return false
 		}
-		debug_bounds_checking('$i.level $key[$new] unsafe (index was $old)')
+		debug_bounds_checking('${i.level} ${key}[${new}] unsafe (index was ${old})')
 		i.max_index[key] = new
 		return false
 	}
-	debug_bounds_checking('$i.level $key[$new] safe (index is $old)')
+	debug_bounds_checking('${i.level} ${key}[${new}] safe (index is ${old})')
 	return true
 }
 
-// safe_offset returns for a previvous array what was the highest
+// safe_offset returns for a previous array what was the highest
 // offset we ever accessed for that identifier
 fn (mut i IndexState) safe_offset(key string) int {
 	$if no_bounds_checking {
@@ -91,7 +91,7 @@ fn (mut i IndexState) safe_offset(key string) int {
 // Also within a function, analysis must be `disabled` when goto or break are
 // encountered as the code flow is then not lineear, and only restart when a
 // new function analysis is started.
-[if !no_bounds_checking]
+@[if !no_bounds_checking]
 fn (mut i IndexState) indent(is_function bool) {
 	mut kvs := []KeyVal{cap: i.max_index.len}
 	for k, v in i.max_index {
@@ -106,7 +106,7 @@ fn (mut i IndexState) indent(is_function bool) {
 }
 
 // restoring the data as it was before the if/for/unsafe block
-[if !no_bounds_checking]
+@[if !no_bounds_checking]
 fn (mut i IndexState) unindent() {
 	i.level -= 1
 	mut keys := []string{cap: i.max_index.len}
